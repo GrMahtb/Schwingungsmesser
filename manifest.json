@@ -1,7 +1,7 @@
 {
   "name": "HTB Schwingungsmesser",
   "short_name": "HTB Vibro",
-  "description": "Schwingungsmessung (mm/s, m/s², mm) mit X/Y/Z/Total.",
+  "description": "Schwingungsmessung mit X/Y/Z/Total.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -13,13 +13,25 @@
       "src": "launchericon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "launchericon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "launchericon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "launchericon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
