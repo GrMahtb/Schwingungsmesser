@@ -1,3 +1,5 @@
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+
 'use strict';
 
 /* ══════════════════════════════════════════════
@@ -472,7 +474,27 @@ function stopMeasurement() {
   rec = null;
 }
 
-dom.startBtn.addEventListener('click', () => running ? stopMeasurement() : startMeasurement());
+dom.startBtn.addEventListener('click', async () => {
+  try {
+    // iOS: Permission muss aus User-Geste kommen -> genau hier
+    if (IS_IOS &&
+        typeof DeviceMotionEvent !== 'undefined' &&
+        typeof DeviceMotionEvent.requestPermission === 'function') {
+
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res !== 'granted') {
+        setStatus('iPhone: Sensorerlaubnis verweigert. iOS-Einstellungen prüfen.', 'is-error');
+        return;
+      }
+    }
+
+    running ? stopMeasurement() : startMeasurement();
+
+  } catch (err) {
+    setStatus('Start-Fehler: ' + err.message, 'is-error');
+    console.error(err);
+  }
+});
 dom.resetBtn.addEventListener('click', () => resetState());
 
 /* ══════════════════════════════════════════════
