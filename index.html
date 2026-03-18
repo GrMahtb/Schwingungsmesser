@@ -8,585 +8,862 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
   <meta name="apple-mobile-web-app-title" content="HTB Vibro"/>
   <title>HTB Schwingungsmesser</title>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json"/>
-
-  <!-- PDF (lokal ins Repo legen!) -->
-  <script src="jspdf.umd.min.js"></script>
-
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <script src="jspdf.umd.min.js" defer></script>
   <style>
     :root{
-      --bg:#111111;
-      --card:#1a1a1a;
-      --card2:#222222;
-      --border:#2e2e2e;
+      --bg:#0f0f10;
+      --card:#171718;
+      --card2:#202022;
+      --border:#2a2a2d;
       --accent:#FFE600;
-      --accent-dim:#ccb800;
-      --text:#f0f0f0;
-      --muted:#777;
-
+      --accent2:#cdbb00;
+      --text:#f2f2f2;
+      --muted:#7a7a84;
       --red:#ff4444;
       --green:#00cc66;
       --blue:#4499ff;
-
-      --radius:14px;
+      --radius:16px;
     }
     *{box-sizing:border-box;margin:0;padding:0;}
     body{
       background:var(--bg);color:var(--text);
-      font-family:'Segoe UI',Arial,sans-serif;
+      font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;
       min-height:100vh;padding:14px;
-      max-width:720px;margin:0 auto;
+      max-width:820px;margin:0 auto;
     }
 
-    /* Header */
-    .htb-header{
-      display:flex;align-items:center;gap:14px;
-      padding:14px 16px;margin-bottom:14px;
-      background:var(--card);border-radius:var(--radius);
+    /* ── Header ── */
+    .brand{
+      background:#111;
       border:1px solid var(--border);
-      border-left:4px solid var(--accent);
+      border-radius:var(--radius);
+      padding:18px 16px 14px;
+      margin-bottom:12px;
+      text-align:center;
     }
-    .htb-logo svg{width:56px;height:56px;}
-    .htb-title h1{font-size:1.25em;color:var(--accent);font-weight:900;letter-spacing:.4px;}
-    .htb-title p{font-size:.75em;color:var(--muted);margin-top:2px;line-height:1.35;}
+    .brand svg.logo-banner{
+      display:block;
+      width:min(560px,96%);
+      height:auto;
+      margin:0 auto 12px;
+    }
+    .brand .subtitle{
+      font-size:1.3em;
+      font-weight:900;
+      color:var(--accent);
+      letter-spacing:.6px;
+    }
+    .brand .subline{
+      font-size:.76em;
+      color:var(--muted);
+      margin-top:5px;
+    }
 
-    /* Install Banner */
+    /* ── Install Banner ── */
     #installBanner{
       display:none;
-      background:#1a1a00;border:1px solid var(--accent);
-      border-radius:var(--radius);padding:10px 14px;
+      background:#191800;
+      border:1px solid var(--accent);
+      border-radius:var(--radius);
+      padding:10px 14px;
       margin-bottom:12px;
-      align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;flex-wrap:wrap;
     }
-    #installBanner span{font-size:.82em;color:var(--accent);}
+    #installBanner span{font-size:.82em;color:var(--accent);font-weight:700;}
     #installBanner button{
-      padding:7px 14px;border-radius:20px;border:none;
-      background:var(--accent);color:#111;font-weight:800;
-      font-size:.8em;cursor:pointer;
+      padding:8px 14px;border-radius:999px;border:none;
+      background:var(--accent);color:#111;font-weight:900;font-size:.82em;cursor:pointer;
     }
 
-    /* Status */
+    /* ── Status ── */
     .status-bar{
-      border-radius:10px;padding:9px 14px;font-size:.8em;
+      display:none;border-radius:12px;padding:10px 14px;font-size:.82em;
       text-align:center;margin-bottom:12px;
       border:1px solid var(--border);background:var(--card);
-      color:var(--muted);transition:all .3s;
+      color:var(--muted);transition:all .2s;
     }
-    .status-bar.running{color:#111;background:var(--accent);border-color:var(--accent);font-weight:900;}
-    .status-bar.done{color:var(--accent);border-color:var(--accent-dim);background:#1a1a00;}
-    .status-bar.error{color:#ff4444;border-color:#661111;background:#1a0000;}
+    .status-bar.running{display:block;background:var(--accent);border-color:var(--accent);color:#111;font-weight:950;}
+    .status-bar.done{display:block;background:#191800;border-color:var(--accent2);color:var(--accent);font-weight:800;}
+    .status-bar.error{display:block;background:#1a0000;border-color:#6b1c1c;color:#ff6b6b;font-weight:800;}
+    .status-bar.info{display:block;}
 
-    /* Cards */
+    /* ── Cards ── */
     .card{
-      background:var(--card);border-radius:var(--radius);
-      padding:14px;margin-bottom:12px;
-      border:1px solid var(--border);
+      background:var(--card);border:1px solid var(--border);
+      border-radius:var(--radius);padding:14px;margin-bottom:12px;
     }
     .card-title{
-      font-size:.72em;color:var(--accent);
-      text-transform:uppercase;letter-spacing:1px;
-      font-weight:800;margin-bottom:12px;
+      font-size:.72em;color:var(--accent);text-transform:uppercase;
+      letter-spacing:1px;font-weight:950;margin-bottom:12px;
       display:flex;align-items:center;gap:8px;
     }
     .card-title::before{
-      content:'';display:inline-block;
-      width:3px;height:14px;background:var(--accent);border-radius:2px;
+      content:"";width:3px;height:14px;border-radius:2px;
+      background:var(--accent);display:inline-block;flex-shrink:0;
     }
 
-    /* Tabs (ohne Icons) */
-    .tabs{display:flex;gap:4px;margin-bottom:12px;background:var(--card2);border-radius:10px;padding:4px;}
+    /* ── Tabs ── */
+    .tabs{
+      display:flex;gap:4px;background:var(--card2);
+      border:1px solid var(--border);border-radius:12px;
+      padding:4px;margin-bottom:12px;
+    }
     .tab{
-      flex:1;text-align:center;padding:8px 4px;border-radius:8px;
-      font-size:.82em;font-weight:800;cursor:pointer;
-      border:none;background:transparent;color:var(--muted);transition:all .2s;
+      flex:1;border:none;background:transparent;color:var(--muted);
+      font-weight:900;font-size:.82em;padding:9px 6px;
+      border-radius:10px;cursor:pointer;transition:all .15s;
     }
     .tab.active{background:var(--accent);color:#111;}
 
-    /* Main value */
+    /* ── Unit switch ── */
+    .unit-switch{
+      display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:10px;
+    }
+    .unit-btn{
+      border:1px solid var(--border);background:var(--card2);color:var(--muted);
+      font-weight:900;font-size:.78em;padding:7px 12px;
+      border-radius:999px;cursor:pointer;user-select:none;transition:all .15s;
+    }
+    .unit-btn.active{border-color:var(--accent);color:#111;background:var(--accent);}
+
+    /* ── Main value ── */
     .main-value{
       font-size:3.6em;font-weight:950;text-align:center;
-      color:var(--accent);font-variant-numeric:tabular-nums;
-      line-height:1;margin:8px 0 2px;
-      text-shadow:0 0 30px rgba(255,230,0,.25);
+      font-variant-numeric:tabular-nums;line-height:1;margin:8px 0 2px;
+      color:var(--accent);text-shadow:0 0 28px rgba(255,230,0,.18);
     }
-    .main-sub{
-      text-align:center;
-      font-size:.78em;color:var(--muted);
-      margin-bottom:4px;
-    }
+    .main-sub{text-align:center;color:var(--muted);font-size:.82em;margin-top:3px;}
 
-    /* Stats */
+    /* ── Stats grid ── */
     .stats-grid{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:8px;margin:10px 0 0;
+      display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px;
     }
-    @media (max-width:520px){
-      .stats-grid{grid-template-columns:repeat(2,1fr);}
-    }
+    @media(max-width:540px){.stats-grid{grid-template-columns:repeat(2,1fr);}}
     .stat-box{
-      background:var(--card2);border-radius:10px;padding:10px 6px;
-      text-align:center;border:1px solid var(--border);
+      background:var(--card2);border:1px solid var(--border);
+      border-radius:12px;padding:10px 8px;text-align:center;
     }
-    .stat-label{font-size:.62em;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
-    .stat-val{font-size:1.2em;font-weight:800;margin:3px 0 1px;font-variant-numeric:tabular-nums;}
+    .stat-label{font-size:.62em;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:800;}
+    .stat-val{font-size:1.22em;margin:3px 0 1px;font-weight:950;font-variant-numeric:tabular-nums;}
     .stat-unit{font-size:.55em;color:#444;}
 
+    /* ── Toggle ── */
+    .toggle{cursor:pointer;user-select:none;}
+    .off{opacity:.3;filter:grayscale(70%);}
+
+    /* ── Duration ── */
     .dur-row{text-align:center;margin-top:10px;}
     .dur-badge{
       display:inline-block;background:var(--card2);border:1px solid var(--border);
-      border-radius:20px;padding:3px 12px;font-size:.75em;color:var(--muted);
+      border-radius:999px;padding:4px 12px;font-size:.75em;color:var(--muted);
       font-variant-numeric:tabular-nums;
     }
 
-    /* Toggle UI */
-    .toggle{cursor:pointer; user-select:none;}
-    .off{opacity:.30; filter:grayscale(70%);}
+    /* ── Canvas ── */
+    canvas{width:100%;background:#0b0b0c;border:1px solid var(--border);border-radius:12px;display:block;}
+    #liveChart{height:200px;}
+    #resultChart{height:230px;}
+    .time-axis{display:flex;justify-content:space-between;font-size:.62em;color:#444;padding:3px 4px;margin-top:5px;}
 
-    /* Canvas */
-    canvas{
-      width:100%;background:#0a0a0a;border-radius:10px;
-      border:1px solid var(--border);display:block;
-    }
-    #liveChart{height:190px;}
-    #resultChart{height:220px;}
-    .time-axis{
-      display:flex;justify-content:space-between;
-      font-size:.62em;color:#444;padding:3px 4px;margin-top:4px;
-    }
-
-    /* Legend buttons */
-    .legend{
-      display:flex;gap:10px;flex-wrap:wrap;justify-content:center;
-      margin-top:10px;
-    }
+    /* ── Legend ── */
+    .legend{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px;}
     .legend-btn{
       display:inline-flex;align-items:center;gap:6px;
       background:transparent;border:1px solid var(--border);
       padding:6px 10px;border-radius:999px;
-      color:var(--muted);cursor:pointer;font-weight:900;font-size:.78em;
+      color:var(--muted);cursor:pointer;font-weight:950;font-size:.78em;
     }
-    .legend-btn.off{ text-decoration:line-through; }
+    .legend-btn.off{text-decoration:line-through;}
     .swatch{width:16px;height:3px;border-radius:2px;display:inline-block;}
 
-    /* Buttons */
-    .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:8px 0;}
+    /* ── Buttons ── */
+    .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:6px 0;}
     .btn{
-      padding:12px 20px;border-radius:28px;border:none;
-      font-size:.9em;font-weight:900;cursor:pointer;
-      transition:all .2s;display:inline-flex;align-items:center;gap:7px;
+      padding:12px 18px;border-radius:999px;border:none;cursor:pointer;
+      font-weight:950;font-size:.9em;transition:all .15s;
     }
-    .btn:active{opacity:.85;transform:scale(.97);}
+    .btn:active{transform:scale(.98);opacity:.88;}
     .btn-primary{background:var(--accent);color:#111;}
     .btn-stop{background:#cc0000;color:#fff;}
-    .btn-secondary{background:var(--card2);color:var(--muted);border:1px solid var(--border);}
-    .btn-csv{background:#1a3320;color:#00cc66;border:1px solid #1a4425;}
-    .btn-pdf{background:#2a2a2a;color:#ddd;border:1px solid var(--border);}
-    .btn-share{background:#1a0a33;color:#aa66ff;border:1px solid #2a1155;}
-    .btn-ios{background:#cc8800;color:#111;font-weight:900;display:none;}
+    .btn-secondary{background:var(--card2);border:1px solid var(--border);color:var(--muted);}
+    .btn-csv{background:#152818;border:1px solid #1f3b25;color:#00cc66;}
+    .btn-pdf{background:#2a2a2a;border:1px solid var(--border);color:#ddd;}
+    .btn-share{background:#1a0a33;border:1px solid #2a1155;color:#aa66ff;}
+    .btn-ios{background:#cc8800;color:#111;font-weight:950;display:none;}
 
-    /* Norm table */
+    /* ── DIN table ── */
     .norm-table{width:100%;border-collapse:collapse;font-size:.78em;}
-    .norm-table td{padding:7px 4px;border-bottom:1px solid #222;vertical-align:middle;}
+    .norm-table td{padding:7px 4px;border-bottom:1px solid #242427;vertical-align:middle;}
     .norm-table tr:last-child td{border-bottom:none;}
     .norm-table tr.active-norm td{background:rgba(255,230,0,.08);}
     .norm-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle;}
-    .norm-range{font-weight:900;color:var(--text);}
+    .norm-range{font-weight:950;color:var(--text);}
     .norm-desc{color:var(--muted);text-align:right;}
 
-    /* Results */
-    #resultsPanel{display:none;}
-    .section-sep{border:none;border-top:2px solid var(--accent);opacity:.25;margin:18px 0;}
+    /* ── Debug (ausklappbar, feste Höhe) ── */
+    details.debug{border:1px solid var(--border);border-radius:12px;background:var(--card2);padding:10px 12px;}
+    details.debug>summary{cursor:pointer;font-weight:950;color:var(--muted);list-style:none;user-select:none;font-size:.82em;}
+    details.debug>summary::-webkit-details-marker{display:none;}
+    details.debug .content{margin-top:10px;border-top:1px solid var(--border);padding-top:10px;}
+    #debugPanel{
+      height:120px;overflow:auto;background:#0b0b0c;border:1px solid var(--border);
+      border-radius:10px;padding:10px;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      font-size:.7em;color:#6c6c74;white-space:pre-wrap;line-height:1.5;
+    }
 
-    /* Link box */
+    /* ── Results ── */
+    #resultsPanel{display:none;}
+    .section-sep{border:none;border-top:2px solid var(--accent);opacity:.25;margin:16px 0;}
+
+    /* ── Share ── */
     .link-box{
-      background:var(--card2);border:1px solid var(--border);border-radius:8px;
-      padding:10px;font-size:.7em;color:var(--muted);word-break:break-all;
-      max-height:90px;overflow-y:auto;font-family:monospace;
-      margin-top:8px;line-height:1.5;
+      background:var(--card2);border:1px solid var(--border);border-radius:12px;
+      padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      font-size:.7em;color:var(--muted);word-break:break-all;
+      max-height:110px;overflow:auto;margin-top:10px;line-height:1.5;
     }
     .link-note{font-size:.67em;color:#cc8800;text-align:center;margin-top:6px;}
 
-    /* Debug */
-    #debugPanel{
-      background:#0a0a0a;border:1px solid var(--border);border-radius:8px;
-      padding:10px;font-size:.7em;font-family:monospace;color:#666;
-      white-space:pre-wrap;line-height:1.6;
-    }
-
-    /* Info / Install text */
-    .text-block{font-size:.82em;color:var(--muted);line-height:1.85;}
+    /* ── Info text ── */
+    .text-block{font-size:.84em;color:var(--muted);line-height:1.9;}
     .text-block b{color:var(--accent);}
+    .text-block p{margin-bottom:4px;}
 
-    .footer{
-      text-align:center;font-size:.62em;color:#333;
-      margin-top:16px;padding-bottom:28px;line-height:1.7;
+    /* ── Axis diagram ── */
+    .axis-diagram{display:flex;flex-direction:column;align-items:center;gap:14px;}
+    .axis-diagram svg{width:min(300px,96%);height:auto;}
+    .axis-info{width:100%;}
+    .axis-row{
+      display:flex;align-items:center;gap:10px;padding:8px 10px;
+      margin-bottom:6px;background:var(--card2);border-radius:10px;border:1px solid var(--border);
     }
+    .axis-badge{
+      width:36px;height:36px;border-radius:8px;flex-shrink:0;
+      display:flex;align-items:center;justify-content:center;font-weight:950;font-size:1em;
+    }
+    .axis-row-text .al{font-size:.85em;font-weight:800;}
+    .axis-row-text .ad{font-size:.72em;color:var(--muted);margin-top:2px;}
+
+    /* ── Install steps ── */
+    .os-tabs{display:flex;gap:6px;margin-bottom:10px;}
+    .os-btn{
+      padding:5px 14px;border-radius:16px;border:1px solid var(--border);
+      background:var(--card2);color:var(--muted);font-size:.78em;cursor:pointer;
+    }
+    .os-btn.active{background:var(--accent);color:#111;border-color:var(--accent);font-weight:800;}
+
+    .footer{text-align:center;font-size:.62em;color:#333;margin-top:16px;padding-bottom:24px;line-height:1.7;}
     .footer span{color:var(--accent);}
   </style>
 </head>
 <body>
 
-  <!-- Header -->
-  <div class="htb-header">
-    <div class="htb-logo">
-      <!-- Inline HTB-Logo -->
-      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-label="HTB Logo">
-        <defs>
-          <clipPath id="diam">
-            <polygon points="100,8 192,100 100,192 8,100"/>
-          </clipPath>
-        </defs>
-        <polygon points="100,8 192,100 100,192 8,100" fill="#111111"
-                 stroke="#FFE600" stroke-width="2"/>
-        <rect x="18" y="66" width="164" height="22" rx="11" fill="white" clip-path="url(#diam)"/>
-        <rect x="18" y="112" width="164" height="22" rx="11" fill="white" clip-path="url(#diam)"/>
-        <text x="100" y="101" text-anchor="middle" dominant-baseline="middle"
-              font-family="'Arial Black',Arial,sans-serif" font-weight="900"
-              font-size="44" fill="#FFE600" letter-spacing="1">HTB</text>
-      </svg>
+<!-- ═══════════ HEADER ═══════════ -->
+<div class="brand">
+  <!-- HTB Banner Logo (Inline SVG – kein externes Bild nötig) -->
+  <svg class="logo-banner" viewBox="0 0 620 100"
+       xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HTB Baugesellschaft m.b.H.">
+    <rect width="620" height="100" fill="#111111" rx="10"/>
+
+    <!-- Raute / Diamond -->
+    <g transform="translate(14,50)">
+      <polygon points="38,-36 76,0 38,36 0,0" fill="#111111" stroke="#FFE600" stroke-width="2"/>
+      <rect x="6" y="-12" width="64" height="10" rx="5" fill="white"
+            clip-path="url(#dc)"/>
+      <rect x="6" y="2"  width="64" height="10" rx="5" fill="white"
+            clip-path="url(#dc)"/>
+      <clipPath id="dc">
+        <polygon points="38,-36 76,0 38,36 0,0"/>
+      </clipPath>
+      <text x="38" y="0" text-anchor="middle" dominant-baseline="central"
+            font-family="'Arial Black',Arial,sans-serif" font-weight="900"
+            font-size="22" fill="#FFE600" letter-spacing="1">HTB</text>
+    </g>
+
+    <!-- Separator line -->
+    <line x1="104" y1="18" x2="104" y2="82" stroke="#2a2a2d" stroke-width="1"/>
+
+    <!-- Company name text -->
+    <text x="118" y="45" font-family="'Segoe UI',Arial,sans-serif"
+          font-weight="700" font-size="22" fill="#f2f2f2">
+      HTB Baugesellschaft m.b.H.
+    </text>
+    <text x="118" y="70" font-family="'Segoe UI',Arial,sans-serif"
+          font-weight="400" font-size="13" fill="#7a7a84">
+      Schwingungsmessung · mm/s · m/s² · mm
+    </text>
+  </svg>
+
+  <div class="subtitle">Schwingungsmesser</div>
+  <div class="subline">X/Y/Z/Total umschaltbar · Live 10 s · CSV · PDF</div>
+</div>
+
+<!-- ═══════════ INSTALL BANNER ═══════════ -->
+<div id="installBanner">
+  <span>Als App installieren (PWA · kostenlos)</span>
+  <button onclick="installPWA()">Installieren</button>
+</div>
+
+<div class="status-bar" id="statusBar"></div>
+
+<!-- ═══════════ TABS ═══════════ -->
+<div class="tabs">
+  <button class="tab active" id="tab-messen"  onclick="showTab('messen')">Messen</button>
+  <button class="tab"        id="tab-info"    onclick="showTab('info')">Achsen</button>
+  <button class="tab"        id="tab-install" onclick="showTab('install')">App</button>
+</div>
+
+<!-- ═══════════ TAB: MESSEN ═══════════ -->
+<div id="pane-messen">
+
+  <!-- Anzeige / Werte -->
+  <div class="card">
+    <div class="card-title">Messwerte</div>
+
+    <div class="main-value" id="mainNum">0.00</div>
+    <div class="main-sub"   id="mainSub">mm/s (Total)</div>
+
+    <div class="unit-switch">
+      <button class="unit-btn active" data-mode="vel"  onclick="setUnitMode('vel')">mm/s</button>
+      <button class="unit-btn"        data-mode="acc"  onclick="setUnitMode('acc')">m/s²</button>
+      <button class="unit-btn"        data-mode="disp" onclick="setUnitMode('disp')">mm</button>
     </div>
-    <div class="htb-title">
-      <h1>HTB Schwingungsmesser</h1>
-      <p>Schwinggeschwindigkeit (mm/s) · X/Y/Z/Total umschaltbar · Live: 10 s</p>
-    </div>
-  </div>
 
-  <!-- Install banner -->
-  <div id="installBanner">
-    <span>Als App installieren (PWA)</span>
-    <button onclick="installPWA()">Installieren</button>
-  </div>
-
-  <div class="status-bar" id="statusBar">Bereit – Drücke Start</div>
-
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab active" id="tab-messen"  onclick="showTab('messen')">Messen</button>
-    <button class="tab"        id="tab-info"    onclick="showTab('info')">Achsen</button>
-    <button class="tab"        id="tab-install" onclick="showTab('install')">App</button>
-  </div>
-
-  <!-- Pane: Messen -->
-  <div id="pane-messen">
-
-    <div class="card">
-      <div class="card-title">Anzeige</div>
-      <div class="main-value"><span id="mainNum">0.00</span></div>
-      <div class="main-sub" id="mainSub">mm/s (Total)</div>
-
-      <div class="stats-grid">
-        <div class="stat-box toggle" data-series="vx" onclick="toggleSeries('vx')">
-          <div class="stat-label">X</div>
-          <div class="stat-val" id="vxVal" style="color:var(--red)">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-        <div class="stat-box toggle" data-series="vy" onclick="toggleSeries('vy')">
-          <div class="stat-label">Y</div>
-          <div class="stat-val" id="vyVal" style="color:var(--green)">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-        <div class="stat-box toggle" data-series="vz" onclick="toggleSeries('vz')">
-          <div class="stat-label">Z</div>
-          <div class="stat-val" id="vzVal" style="color:var(--blue)">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-
-        <div class="stat-box toggle" data-series="vt" onclick="toggleSeries('vt')">
-          <div class="stat-label">Total</div>
-          <div class="stat-val" id="vtVal" style="color:var(--accent)">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-
-        <div class="stat-box">
-          <div class="stat-label">Peak Total</div>
-          <div class="stat-val" id="peakVal" style="color:var(--accent)">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">RMS Total</div>
-          <div class="stat-val" id="rmsVal" style="color:#aaa">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Events</div>
-          <div class="stat-val" id="evtVal" style="color:#555">0</div>
-          <div class="stat-unit">#</div>
-        </div>
+    <div class="stats-grid">
+      <div class="stat-box toggle" data-series="x" onclick="toggleSeries('x')">
+        <div class="stat-label">X</div>
+        <div class="stat-val" id="xVal" style="color:var(--red)">0.00</div>
+        <div class="stat-unit" id="xUnit">mm/s</div>
+      </div>
+      <div class="stat-box toggle" data-series="y" onclick="toggleSeries('y')">
+        <div class="stat-label">Y</div>
+        <div class="stat-val" id="yVal" style="color:var(--green)">0.00</div>
+        <div class="stat-unit" id="yUnit">mm/s</div>
+      </div>
+      <div class="stat-box toggle" data-series="z" onclick="toggleSeries('z')">
+        <div class="stat-label">Z</div>
+        <div class="stat-val" id="zVal" style="color:var(--blue)">0.00</div>
+        <div class="stat-unit" id="zUnit">mm/s</div>
+      </div>
+      <div class="stat-box toggle" data-series="t" onclick="toggleSeries('t')">
+        <div class="stat-label">Total</div>
+        <div class="stat-val" id="tVal" style="color:var(--accent)">0.00</div>
+        <div class="stat-unit" id="tUnit">mm/s</div>
       </div>
 
-      <div class="dur-row">
-        <span style="font-size:.72em;color:var(--muted)">Dauer: </span>
-        <span class="dur-badge" id="durBadge">00:00</span>
+      <div class="stat-box">
+        <div class="stat-label">Peak (Total)</div>
+        <div class="stat-val" id="peakVal" style="color:var(--accent)">0.00</div>
+        <div class="stat-unit" id="peakUnit">mm/s</div>
       </div>
+      <div class="stat-box">
+        <div class="stat-label">RMS (Total)</div>
+        <div class="stat-val" id="rmsVal" style="color:#aaa">0.00</div>
+        <div class="stat-unit" id="rmsUnit">mm/s</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Events</div>
+        <div class="stat-val" id="evtVal" style="color:#555">0</div>
+        <div class="stat-unit">#</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Dauer</div>
+        <div class="stat-val" id="durVal" style="color:#777;font-size:.9em">00:00</div>
+        <div class="stat-unit">mm:ss</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Chart -->
+  <div class="card">
+    <div class="card-title">Live-Verlauf (letzte 10 Sekunden)</div>
+    <canvas id="liveChart"></canvas>
+    <div class="time-axis" id="liveAxis"></div>
+    <div class="legend">
+      <button class="legend-btn" data-series="x" onclick="toggleSeries('x')">
+        <span class="swatch" style="background:var(--red)"></span>X
+      </button>
+      <button class="legend-btn" data-series="y" onclick="toggleSeries('y')">
+        <span class="swatch" style="background:var(--green)"></span>Y
+      </button>
+      <button class="legend-btn" data-series="z" onclick="toggleSeries('z')">
+        <span class="swatch" style="background:var(--blue)"></span>Z
+      </button>
+      <button class="legend-btn" data-series="t" onclick="toggleSeries('t')">
+        <span class="swatch" style="background:var(--accent)"></span>Total
+      </button>
+    </div>
+  </div>
+
+  <!-- Steuerung -->
+  <div class="card">
+    <div class="card-title">Steuerung</div>
+    <div class="btn-row">
+      <button class="btn btn-ios" id="permBtn" onclick="requestPermission()">iOS Sensorerlaubnis</button>
+      <button class="btn btn-primary" id="startBtn" onclick="toggleMeasurement()">Start</button>
+      <button class="btn btn-secondary" onclick="resetAll()">Reset</button>
+    </div>
+  </div>
+
+  <!-- DIN 4150-2 -->
+  <div class="card" id="dinCard">
+    <div class="card-title">Bewertung – DIN 4150-2</div>
+    <div id="dinNote" class="text-block"
+         style="margin-bottom:10px;color:#cc8800;display:none;">
+      <p>Total ist ausgeblendet – DIN-Auswertung basiert trotzdem auf Total (mm/s).</p>
+    </div>
+    <table class="norm-table">
+      <tr id="n0"><td><span class="norm-dot" style="background:#00e676"></span>
+          <span class="norm-range">&lt; 0.3 mm/s</span></td>
+          <td class="norm-desc">Kaum wahrnehmbar</td></tr>
+      <tr id="n1"><td><span class="norm-dot" style="background:#aeea00"></span>
+          <span class="norm-range">0.3 – 1.0 mm/s</span></td>
+          <td class="norm-desc">Schwach wahrnehmbar</td></tr>
+      <tr id="n2"><td><span class="norm-dot" style="background:#ffd600"></span>
+          <span class="norm-range">1.0 – 3.0 mm/s</span></td>
+          <td class="norm-desc">Deutlich wahrnehmbar</td></tr>
+      <tr id="n3"><td><span class="norm-dot" style="background:#ff9800"></span>
+          <span class="norm-range">3.0 – 10 mm/s</span></td>
+          <td class="norm-desc">Stark – Gebäude prüfen</td></tr>
+      <tr id="n4"><td><span class="norm-dot" style="background:#ff1744"></span>
+          <span class="norm-range">&gt; 10 mm/s</span></td>
+          <td class="norm-desc">Schäden möglich</td></tr>
+    </table>
+  </div>
+
+  <!-- Debug (ausklappbar) -->
+  <div class="card">
+    <details class="debug">
+      <summary>Sensor-Debug (ausklappen)</summary>
+      <div class="content">
+        <div id="debugPanel">Warte auf Sensor-Daten …</div>
+      </div>
+    </details>
+  </div>
+
+  <!-- Ergebnisse -->
+  <div id="resultsPanel">
+    <hr class="section-sep">
+    <div style="text-align:center;margin-bottom:12px">
+      <div style="font-size:1.05em;color:var(--accent);font-weight:950;letter-spacing:.5px">
+        Letzte Messung
+      </div>
+      <div style="font-size:.75em;color:var(--muted);margin-top:4px" id="resMeta">—</div>
     </div>
 
     <div class="card">
-      <div class="card-title">Live-Verlauf (letzte 10 Sekunden)</div>
-      <canvas id="liveChart"></canvas>
-      <div class="time-axis" id="liveAxis"></div>
-
+      <div class="card-title">Diagramm (letzte Aufzeichnung)</div>
+      <canvas id="resultChart"></canvas>
+      <div class="time-axis" id="resAxis"></div>
       <div class="legend">
-        <button class="legend-btn" data-series="vx" onclick="toggleSeries('vx')">
-          <span class="swatch" style="background:var(--red)"></span> X
+        <button class="legend-btn" data-series="x" onclick="toggleSeries('x')">
+          <span class="swatch" style="background:var(--red)"></span>X
         </button>
-        <button class="legend-btn" data-series="vy" onclick="toggleSeries('vy')">
-          <span class="swatch" style="background:var(--green)"></span> Y
+        <button class="legend-btn" data-series="y" onclick="toggleSeries('y')">
+          <span class="swatch" style="background:var(--green)"></span>Y
         </button>
-        <button class="legend-btn" data-series="vz" onclick="toggleSeries('vz')">
-          <span class="swatch" style="background:var(--blue)"></span> Z
+        <button class="legend-btn" data-series="z" onclick="toggleSeries('z')">
+          <span class="swatch" style="background:var(--blue)"></span>Z
         </button>
-        <button class="legend-btn" data-series="vt" onclick="toggleSeries('vt')">
-          <span class="swatch" style="background:var(--accent)"></span> Total
+        <button class="legend-btn" data-series="t" onclick="toggleSeries('t')">
+          <span class="swatch" style="background:var(--accent)"></span>Total
         </button>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">Steuerung</div>
+      <div class="card-title">Export</div>
       <div class="btn-row">
-        <button class="btn btn-ios" id="permBtn" onclick="requestPermission()">iOS Sensorerlaubnis</button>
-        <button class="btn btn-primary" id="startBtn" onclick="toggleMeasurement()">Start</button>
-        <button class="btn btn-secondary" onclick="resetAll()">Reset</button>
+        <button class="btn btn-csv"       onclick="exportCSV()">CSV</button>
+        <button class="btn btn-pdf"       onclick="exportPDF()">PDF Diagramm</button>
+        <button class="btn btn-share"     onclick="generateShareLink()">Link</button>
+        <button class="btn btn-secondary" onclick="resetAll()">Neue Messung</button>
+      </div>
+      <div id="linkArea" style="display:none">
+        <div class="link-box" id="linkBox"></div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn btn-secondary" style="font-size:.82em"
+                  onclick="copyLink(this)">Kopieren</button>
+        </div>
+        <p class="link-note" id="linkNote"></p>
       </div>
     </div>
+  </div>
 
-    <div class="card">
-      <div class="card-title">Bewertung – DIN 4150-2 (Total)</div>
-      <table class="norm-table">
-        <tr id="n0"><td><span class="norm-dot" style="background:#00e676"></span><span class="norm-range">&lt; 0.3 mm/s</span></td><td class="norm-desc">Kaum wahrnehmbar</td></tr>
-        <tr id="n1"><td><span class="norm-dot" style="background:#aeea00"></span><span class="norm-range">0.3 – 1.0 mm/s</span></td><td class="norm-desc">Schwach wahrnehmbar</td></tr>
-        <tr id="n2"><td><span class="norm-dot" style="background:#ffd600"></span><span class="norm-range">1.0 – 3.0 mm/s</span></td><td class="norm-desc">Deutlich wahrnehmbar</td></tr>
-        <tr id="n3"><td><span class="norm-dot" style="background:#ff9800"></span><span class="norm-range">3.0 – 10 mm/s</span></td><td class="norm-desc">Stark – Gebäude prüfen</td></tr>
-        <tr id="n4"><td><span class="norm-dot" style="background:#ff1744"></span><span class="norm-range">&gt; 10 mm/s</span></td><td class="norm-desc">Schäden möglich</td></tr>
-      </table>
-    </div>
+</div><!-- /pane-messen -->
 
-    <div class="card">
-      <div class="card-title">Sensor-Debug</div>
-      <div id="debugPanel">Warte auf Sensor-Daten …</div>
-    </div>
+<!-- ═══════════ TAB: ACHSEN ═══════════ -->
+<div id="pane-info" style="display:none">
 
-    <!-- Results -->
-    <div id="resultsPanel">
-      <hr class="section-sep"/>
+  <div class="card">
+    <div class="card-title">Achsenausrichtung am Smartphone</div>
+    <div class="axis-diagram">
 
-      <div style="text-align:center;margin-bottom:12px">
-        <div style="font-size:1.05em;color:var(--accent);font-weight:950;letter-spacing:.5px">
-          Letzte Messung
-        </div>
-        <div style="font-size:.75em;color:var(--muted);margin-top:4px" id="resMeta">—</div>
-      </div>
+      <!-- SVG Piktogramm -->
+      <svg viewBox="0 0 300 260" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="aX" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+            <path d="M0,0 L8,3.5 L0,7 Z" fill="#ff4444"/>
+          </marker>
+          <marker id="aY" markerWidth="8" markerHeight="8" refX="3.5" refY="7" orient="auto">
+            <path d="M0,7 L3.5,0 L7,7 Z" fill="#00cc66"/>
+          </marker>
+          <marker id="aZ" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+            <path d="M0,0 L8,3.5 L0,7 Z" fill="#4499ff"/>
+          </marker>
+        </defs>
 
-      <div class="card">
-        <div class="card-title">Diagramm (letzte Aufzeichnung)</div>
-        <canvas id="resultChart"></canvas>
-        <div class="time-axis" id="resAxis"></div>
+        <!-- Smartphone Körper -->
+        <rect x="96" y="28" width="108" height="194" rx="14" fill="#1a1a1a" stroke="#FFE600" stroke-width="2"/>
+        <!-- Display -->
+        <rect x="104" y="46" width="92" height="156" rx="6" fill="#0b0b0c"/>
+        <!-- Speaker -->
+        <rect x="134" y="35" width="32" height="4" rx="2" fill="#333"/>
+        <!-- Home line -->
+        <rect x="134" y="214" width="32" height="3" rx="1.5" fill="#333"/>
 
-        <div class="legend">
-          <button class="legend-btn" data-series="vx" onclick="toggleSeries('vx')">
-            <span class="swatch" style="background:var(--red)"></span> X
-          </button>
-          <button class="legend-btn" data-series="vy" onclick="toggleSeries('vy')">
-            <span class="swatch" style="background:var(--green)"></span> Y
-          </button>
-          <button class="legend-btn" data-series="vz" onclick="toggleSeries('vz')">
-            <span class="swatch" style="background:var(--blue)"></span> Z
-          </button>
-          <button class="legend-btn" data-series="vt" onclick="toggleSeries('vt')">
-            <span class="swatch" style="background:var(--accent)"></span> Total
-          </button>
-        </div>
-      </div>
+        <!-- HTB mini auf Screen -->
+        <text x="150" y="122" text-anchor="middle" dominant-baseline="middle"
+              font-family="'Arial Black',Arial" font-weight="900" font-size="16" fill="#FFE600">HTB</text>
+        <text x="150" y="142" text-anchor="middle"
+              font-family="Arial" font-size="8" fill="#444">Vibro</text>
 
-      <div class="card">
-        <div class="card-title">Export</div>
-        <div class="btn-row">
-          <button class="btn btn-csv" onclick="exportCSV()">CSV</button>
-          <button class="btn btn-pdf" onclick="exportPDF()">PDF Diagramm</button>
-          <button class="btn btn-share" onclick="generateShareLink()">Link</button>
-          <button class="btn btn-secondary" onclick="resetAll()">Neue Messung</button>
-        </div>
+        <!-- X Pfeile -->
+        <line x1="38" y1="125" x2="91" y2="125" stroke="#ff4444" stroke-width="2.2" marker-end="url(#aX)"/>
+        <line x1="209" y1="125" x2="255" y2="125" stroke="#ff4444" stroke-width="2.2" marker-end="url(#aX)"/>
+        <text x="22" y="120" font-size="9" fill="#ff4444" font-family="Arial" font-weight="bold">X−</text>
+        <text x="258" y="120" font-size="9" fill="#ff4444" font-family="Arial" font-weight="bold">X+</text>
 
-        <div id="linkArea" style="display:none">
-          <div class="link-box" id="linkBox"></div>
-          <div class="btn-row" style="margin-top:8px">
-            <button class="btn btn-secondary" style="font-size:.82em" onclick="copyLink(this)">Kopieren</button>
+        <!-- Y Pfeile -->
+        <line x1="150" y1="22" x2="150" y2="4" stroke="#00cc66" stroke-width="2.2" marker-end="url(#aY)"/>
+        <line x1="150" y1="228" x2="150" y2="256" stroke="#00cc66" stroke-width="2.2"/>
+        <text x="156" y="12" font-size="9" fill="#00cc66" font-family="Arial" font-weight="bold">Y+</text>
+        <text x="156" y="256" font-size="9" fill="#00cc66" font-family="Arial" font-weight="bold">Y−</text>
+
+        <!-- Z Pfeil (aus Display) -->
+        <line x1="205" y1="92" x2="244" y2="58" stroke="#4499ff" stroke-width="2.2" marker-end="url(#aZ)"/>
+        <text x="248" y="54" font-size="9" fill="#4499ff" font-family="Arial" font-weight="bold">Z+</text>
+        <text x="196" y="104" font-size="7.5" fill="#4499ff" font-family="Arial">(aus Display)</text>
+      </svg>
+
+      <div class="axis-info">
+        <div class="axis-row">
+          <div class="axis-badge" style="background:#330000;color:var(--red)">X</div>
+          <div class="axis-row-text">
+            <div class="al" style="color:var(--red)">X – Links / Rechts (horizontal)</div>
+            <div class="ad">Positiv = rechts (Handy aufrecht, Portrait)</div>
           </div>
-          <p class="link-note" id="linkNote"></p>
+        </div>
+        <div class="axis-row">
+          <div class="axis-badge" style="background:#003315;color:var(--green)">Y</div>
+          <div class="axis-row-text">
+            <div class="al" style="color:var(--green)">Y – Oben / Unten (vertikal)</div>
+            <div class="ad">Positiv = Richtung Oberkante des Handys</div>
+          </div>
+        </div>
+        <div class="axis-row">
+          <div class="axis-badge" style="background:#001533;color:var(--blue)">Z</div>
+          <div class="axis-row-text">
+            <div class="al" style="color:var(--blue)">Z – Senkrecht zum Display</div>
+            <div class="ad">Positiv = aus dem Display heraus. Flach liegend = Auf/Ab-Richtung!</div>
+          </div>
+        </div>
+        <div class="axis-row">
+          <div class="axis-badge" style="background:#1a1700;color:var(--accent)">Σ</div>
+          <div class="axis-row-text">
+            <div class="al" style="color:var(--accent)">Total – √(X²+Y²+Z²)</div>
+            <div class="ad">Kombination aller Achsen. Basis für DIN 4150-2 Auswertung.</div>
+          </div>
         </div>
       </div>
     </div>
+  </div>
 
-  </div><!-- /pane-messen -->
+  <div class="card">
+    <div class="card-title">Messtipps</div>
+    <div class="text-block">
+      <p><b>Flach auf Oberfläche:</b> Z-Achse = vertikale Schwingung (Auf/Ab)</p>
+      <p><b>Aufrecht anlehnen:</b> Y-Achse = vertikale Schwingung</p>
+      <p><b>Feste Kopplung!</b> Handy direkt auflegen, nicht freihalten.</p>
+      <p><b>RMS:</b> mind. 10–30 s messen für aussagekräftige Werte.</p>
+      <p><b>Verschiebung (mm):</b> doppelte Integration – nur Orientierung, kann driften.</p>
+      <p style="margin-top:6px;color:#cc8800"><b>Nicht kalibriert!</b> Für normgerechte Nachweise ist ein kalibriertes Gerät erforderlich.</p>
+    </div>
+  </div>
+</div><!-- /pane-info -->
 
-  <!-- Pane: Achsen -->
-  <div id="pane-info" style="display:none">
-    <div class="card">
-      <div class="card-title">Achsenausrichtung</div>
-      <div class="text-block">
-        <p><b>X</b> = links/rechts (seitlich)</p>
-        <p><b>Y</b> = Richtung Oberkante/Unterkante (längs)</p>
-        <p><b>Z</b> = senkrecht zum Display (aus dem Display heraus / hinein)</p>
-        <p style="margin-top:8px">
-          Tipp: Handy flach mit Display nach oben auflegen → <b>Z</b> ist dann die „Auf/Ab“-Richtung.
-        </p>
-      </div>
+<!-- ═══════════ TAB: APP ═══════════ -->
+<div id="pane-install" style="display:none">
+  <div class="card">
+    <div class="card-title">Als App installieren (PWA)</div>
+
+    <div class="os-tabs">
+      <button class="os-btn active" onclick="showOS('android',this)">Android</button>
+      <button class="os-btn"        onclick="showOS('ios',this)">iPhone</button>
     </div>
 
-    <div class="card">
-      <div class="card-title">Messtipps</div>
-      <div class="text-block">
-        <p>Für stabile Werte Handy möglichst fest mit dem Messobjekt koppeln (nicht in der Hand halten).</p>
-        <p>RMS wird über die Messdauer gebildet – am besten 10–30 s messen.</p>
-        <p>Smartphone-Sensoren sind nicht kalibriert; Werte dienen als Orientierung.</p>
-      </div>
+    <div id="inst-android" class="text-block">
+      <p>1. Seite in <b>Chrome</b> öffnen</p>
+      <p>2. Menü <b>(⋮)</b> antippen</p>
+      <p>3. <b>„App installieren"</b> oder <b>„Zum Startbildschirm hinzufügen"</b></p>
+      <p>4. <b>„Installieren"</b> bestätigen</p>
+      <p style="margin-top:6px;color:var(--green)">✅ App erscheint am Homescreen – ohne App Store!</p>
+      <p style="margin-top:4px;color:var(--muted)">Tipp: Oben erscheint ggf. automatisch ein Install-Banner.</p>
+    </div>
+
+    <div id="inst-ios" class="text-block" style="display:none">
+      <p>1. Seite in <b>Safari</b> öffnen (nicht Chrome!)</p>
+      <p>2. Teilen-Symbol <b>(□↑)</b> antippen</p>
+      <p>3. <b>„Zum Home-Bildschirm"</b> wählen</p>
+      <p>4. Name bestätigen → <b>„Hinzufügen"</b></p>
+      <p style="margin-top:6px;color:var(--green)">✅ App erscheint am iPhone-Homescreen!</p>
+      <p style="margin-top:4px;color:#cc8800">Beim ersten Start: Sensor-Erlaubnis <b>erteilen</b>.</p>
     </div>
   </div>
 
-  <!-- Pane: App -->
-  <div id="pane-install" style="display:none">
-    <div class="card">
-      <div class="card-title">Als App installieren (PWA)</div>
-      <div class="text-block">
-        <p><b>Android (Chrome):</b> Menü (⋮) → „App installieren“ oder „Zum Startbildschirm hinzufügen“</p>
-        <p><b>iPhone (Safari):</b> Teilen → „Zum Home-Bildschirm“</p>
-        <p style="margin-top:8px">Hinweis: PDF-Export benötigt die Datei <b>jspdf.umd.min.js</b> im Repo.</p>
-      </div>
+  <div class="card">
+    <div class="card-title">Was ist eine PWA?</div>
+    <div class="text-block">
+      <p><b>Progressive Web App</b> = sieht aus und fühlt sich an wie eine App:</p>
+      <p>✅ Icon am Homescreen</p>
+      <p>✅ Startet im Vollbild</p>
+      <p>✅ Kostenlos – kein App Store</p>
+      <p>✅ Offline-fähig (nach erstem Laden)</p>
+      <p>✅ Updates automatisch über GitHub Pages</p>
     </div>
   </div>
+</div><!-- /pane-install -->
 
-  <p class="footer">
-    <span>HTB Schwingungsmesser</span> · PWA<br>
-    Smartphone-Sensoren sind nicht werkskalibriert.
-  </p>
+<div class="footer">
+  <span>HTB Schwingungsmesser</span> · PWA · HTB Baugesellschaft m.b.H.<br>
+  Smartphone-Sensoren sind nicht werkskalibriert – Werte dienen der Orientierung.
+</div>
 
 <script>
-/* ========= Konfiguration ========= */
-const LIVE_WINDOW_MS = 10_000;
+/* ════════════════════════════════════════════
+   Konfiguration
+════════════════════════════════════════════ */
+const LIVE_WINDOW_MS      = 10_000;
 const MAX_RECORDED_POINTS = 30_000;
-const HP = 0.97;
-const LEAK = 0.985;
+const HP      = 0.97;
+const LEAK_V  = 0.985;
+const LEAK_S  = 0.992;
 
-/* ========= Sichtbarkeit (Toggles) ========= */
-const visible = { vx:true, vy:true, vz:true, vt:true };
+/* ════════════════════════════════════════════
+   Zustand
+════════════════════════════════════════════ */
+const visible = { x:true, y:true, z:true, t:true };
+let unitMode  = 'vel';
 
-/* ========= State ========= */
-let measuring=false, lastTime=null, measureStart=null;
-let durationTimer=null, noDataTimer=null, motionEventCount=0;
+let measuring = false, lastTime = null, measureStart = null;
+let durationTimer = null, noDataTimer = null, motionEventCount = 0;
 
-let vX=0,vY=0,vZ=0, hpX=0,hpY=0,hpZ=0, lastAX=0,lastAY=0,lastAZ=0;
-let peakTotal=0, squaredSumTotal=0, sampleCount=0;
+let ahx=0,ahy=0,ahz=0;
+let lastAX=0,lastAY=0,lastAZ=0;
+let vX=0,vY=0,vZ=0;
+let sX=0,sY=0,sZ=0;
 
-let history=[];  // {t, vx, vy, vz, vt}
-let recorded=[]; // {t, vx, vy, vz, vt, ax, ay, az}
+const stats = {
+  vel : { peak:0, sum2:0, count:0 },
+  acc : { peak:0, sum2:0, count:0 },
+  disp: { peak:0, sum2:0, count:0 }
+};
 
-/* ========= Canvas ========= */
-const liveC=document.getElementById('liveChart');
-const resC =document.getElementById('resultChart');
-const liveCtx=liveC.getContext('2d');
-const resCtx =resC.getContext('2d');
+let history  = [];  // {t, ax,ay,az,at, vx,vy,vz,vt, sx,sy,sz,st}
+let recorded = [];  // + arx,ary,arz (Roh)
 
-function setupCanvas(c,ctx){
-  const dpr=window.devicePixelRatio||1;
-  const W=c.clientWidth, H=c.clientHeight;
-  c.width=Math.floor(W*dpr); c.height=Math.floor(H*dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  return {W,H};
+/* ════════════════════════════════════════════
+   Canvas
+════════════════════════════════════════════ */
+const liveC   = document.getElementById('liveChart');
+const resC    = document.getElementById('resultChart');
+const liveCtx = liveC.getContext('2d');
+const resCtx  = resC.getContext('2d');
+
+function setupCanvas(c, ctx){
+  const dpr = window.devicePixelRatio || 1;
+  const W = c.clientWidth, H = c.clientHeight;
+  c.width  = Math.floor(W * dpr);
+  c.height = Math.floor(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { W, H };
 }
-function resizeAll(){ setupCanvas(liveC,liveCtx); setupCanvas(resC,resCtx); drawLive(); drawResult(); }
-window.addEventListener('resize',resizeAll);
-setTimeout(resizeAll,60);
-
-/* ========= UI Helpers ========= */
-function setStatus(msg,cls=''){
-  const el=document.getElementById('statusBar');
-  el.textContent=msg; el.className='status-bar '+cls;
+function resizeAll(){
+  setupCanvas(liveC, liveCtx);
+  setupCanvas(resC, resCtx);
+  drawLive();
+  drawResult();
 }
+window.addEventListener('resize', resizeAll);
+setTimeout(resizeAll, 80);
+
+/* ════════════════════════════════════════════
+   Status
+════════════════════════════════════════════ */
+function setStatus(msg, cls = 'info'){
+  const el = document.getElementById('statusBar');
+  if(!msg){ el.style.display = 'none'; el.className = 'status-bar'; return; }
+  el.style.display = 'block';
+  el.textContent   = msg;
+  el.className     = 'status-bar ' + cls;
+}
+setStatus('');  // kein initialer Text
+
+/* ════════════════════════════════════════════
+   Helpers
+════════════════════════════════════════════ */
 function fmtTime(ms){
-  const s=Math.floor(ms/1000),m=Math.floor(s/60);
-  return String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+  const s = Math.floor(ms/1000), m = Math.floor(s/60);
+  return String(m).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
 }
 function getColorTotal(v){
-  return v<0.3?'#00e676':v<1?'#aeea00':v<3?'#ffd600':v<10?'#ff9800':'#ff1744';
+  return v < 0.3 ? '#00e676' : v < 1 ? '#aeea00' : v < 3 ? '#ffd600' : v < 10 ? '#ff9800' : '#ff1744';
 }
 function highlightNorm(v){
-  ['n0','n1','n2','n3','n4'].forEach(id=>document.getElementById(id).classList.remove('active-norm'));
-  document.getElementById('n'+(v<0.3?0:v<1?1:v<3?2:v<10?3:4)).classList.add('active-norm');
+  ['n0','n1','n2','n3','n4'].forEach(id => document.getElementById(id).classList.remove('active-norm'));
+  document.getElementById('n' + (v < 0.3 ? 0 : v < 1 ? 1 : v < 3 ? 2 : v < 10 ? 3 : 4)).classList.add('active-norm');
+}
+function unitLabel(){
+  return unitMode === 'vel' ? 'mm/s' : unitMode === 'acc' ? 'm/s²' : 'mm';
 }
 
-/* ========= Tabs ========= */
+/* ════════════════════════════════════════════
+   Tabs
+════════════════════════════════════════════ */
 function showTab(name){
-  ['messen','info','install'].forEach(t=>{
-    document.getElementById('pane-'+t).style.display = (t===name)?'block':'none';
-    document.getElementById('tab-'+t).classList.toggle('active', t===name);
+  ['messen','info','install'].forEach(t => {
+    document.getElementById('pane-' + t).style.display = (t === name) ? 'block' : 'none';
+    document.getElementById('tab-'  + t).classList.toggle('active', t === name);
   });
-  if(name==='messen') setTimeout(resizeAll,60);
+  if(name === 'messen') setTimeout(resizeAll, 80);
 }
 
-/* ========= Toggle Series ========= */
-function toggleSeries(key){
-  visible[key] = !visible[key];
-  document.querySelectorAll(`[data-series="${key}"]`).forEach(el=>{
-    el.classList.toggle('off', !visible[key]);
-  });
+function showOS(name, btn){
+  document.getElementById('inst-android').style.display = name === 'android' ? 'block' : 'none';
+  document.getElementById('inst-ios').style.display     = name === 'ios'     ? 'block' : 'none';
+  document.querySelectorAll('.os-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+/* ════════════════════════════════════════════
+   Einheit (Unit Mode)
+════════════════════════════════════════════ */
+function setUnitMode(mode){
+  unitMode = mode;
+  document.querySelectorAll('.unit-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+
+  // DIN nur bei mm/s relevant
+  document.getElementById('dinCard').style.display = (mode === 'vel') ? 'block' : 'none';
+
+  const u = unitLabel();
+  ['xUnit','yUnit','zUnit','tUnit','peakUnit','rmsUnit'].forEach(id =>
+    document.getElementById(id).textContent = u);
+
+  if(history.length) updateUIFromPoint(history[history.length - 1]);
+  else document.getElementById('mainSub').textContent = `${u} (Total)`;
+
   drawLive();
   drawResult();
 }
 
-/* ========= Primary Anzeige (wenn Total ausgeblendet) ========= */
-function updateMainDisplay(vx,vy,vz,vt){
-  let label = 'mm/s (Total)';
-  let val = vt;
-
-  if (!visible.vt) {
-    // wenn Total aus, zeige Maximum der sichtbaren Achsen
-    const candidates = [];
-    if (visible.vx) candidates.push({k:'X', v:vx});
-    if (visible.vy) candidates.push({k:'Y', v:vy});
-    if (visible.vz) candidates.push({k:'Z', v:vz});
-
-    if (candidates.length) {
-      candidates.sort((a,b)=>b.v-a.v);
-      val = candidates[0].v;
-      label = `mm/s (Max sichtbar: ${candidates[0].k})`;
-    } else {
-      val = 0;
-      label = 'mm/s (keine Serie aktiv)';
-    }
-  }
-  const mainNum = document.getElementById('mainNum');
-  mainNum.textContent = val.toFixed(2);
-  mainNum.style.color = getColorTotal(val);
-  document.getElementById('mainSub').textContent = label;
+/* ════════════════════════════════════════════
+   Toggle Achsen
+════════════════════════════════════════════ */
+function toggleSeries(key){
+  visible[key] = !visible[key];
+  document.querySelectorAll(`[data-series="${key}"]`).forEach(el =>
+    el.classList.toggle('off', !visible[key]));
+  updateDinNote();
+  drawLive();
+  drawResult();
 }
 
-/* ========= Sensor ========= */
+function updateDinNote(){
+  document.getElementById('dinNote').style.display =
+    (unitMode === 'vel' && !visible.t) ? 'block' : 'none';
+}
+
+/* ════════════════════════════════════════════
+   Werte aus Datenpunkt für aktuellen Mode
+════════════════════════════════════════════ */
+function pickValues(p){
+  if(unitMode === 'acc')  return { x: p.ax, y: p.ay, z: p.az, t: p.at };
+  if(unitMode === 'disp') return { x: p.sx, y: p.sy, z: p.sz, t: p.st };
+  return { x: p.vx, y: p.vy, z: p.vz, t: p.vt };
+}
+
+function updateUIFromPoint(p){
+  const v  = pickValues(p);
+  const u  = unitLabel();
+
+  document.getElementById('xVal').textContent = v.x.toFixed(2);
+  document.getElementById('yVal').textContent = v.y.toFixed(2);
+  document.getElementById('zVal').textContent = v.z.toFixed(2);
+  document.getElementById('tVal').textContent = v.t.toFixed(2);
+
+  // Hauptanzeige
+  let mainVal = v.t, mainLabel = `${u} (Total)`;
+  if(!visible.t){
+    const cand = [];
+    if(visible.x) cand.push({ k:'X', v: v.x });
+    if(visible.y) cand.push({ k:'Y', v: v.y });
+    if(visible.z) cand.push({ k:'Z', v: v.z });
+    if(cand.length){
+      cand.sort((a,b) => b.v - a.v);
+      mainVal  = cand[0].v;
+      mainLabel = `${u} (${cand[0].k})`;
+    } else {
+      mainVal = 0; mainLabel = `${u} (–)`;
+    }
+  }
+  const mn = document.getElementById('mainNum');
+  mn.textContent = mainVal.toFixed(2);
+  mn.style.color = getColorTotal(mainVal);
+  document.getElementById('mainSub').textContent = mainLabel;
+
+  // Peak/RMS
+  const st  = stats[unitMode];
+  const rms = st.count > 0 ? Math.sqrt(st.sum2 / st.count) : 0;
+  document.getElementById('peakVal').textContent = st.peak.toFixed(2);
+  document.getElementById('rmsVal').textContent  = rms.toFixed(2);
+
+  // DIN (immer vel.peak)
+  if(unitMode === 'vel') highlightNorm(stats.vel.peak);
+}
+
+/* ════════════════════════════════════════════
+   Sensor Handler
+════════════════════════════════════════════ */
 function handleMotion(e){
   motionEventCount++;
   document.getElementById('evtVal').textContent = motionEventCount;
 
-  // robuste Auslesung
-  let ax=0,ay=0,az=0;
+  let arx = 0, ary = 0, arz = 0;
   if(e.accelerationIncludingGravity){
-    ax=Number(e.accelerationIncludingGravity.x)||0;
-    ay=Number(e.accelerationIncludingGravity.y)||0;
-    az=Number(e.accelerationIncludingGravity.z)||0;
+    arx = Number(e.accelerationIncludingGravity.x) || 0;
+    ary = Number(e.accelerationIncludingGravity.y) || 0;
+    arz = Number(e.accelerationIncludingGravity.z) || 0;
   }
-  if(e.acceleration&&(e.acceleration.x!=null||e.acceleration.y!=null||e.acceleration.z!=null)){
-    ax=Number(e.acceleration.x)||ax;
-    ay=Number(e.acceleration.y)||ay;
-    az=Number(e.acceleration.z)||az;
+  if(e.acceleration && (e.acceleration.x != null || e.acceleration.y != null || e.acceleration.z != null)){
+    arx = Number(e.acceleration.x) || arx;
+    ary = Number(e.acceleration.y) || ary;
+    arz = Number(e.acceleration.z) || arz;
   }
 
-  if(motionEventCount%10===0){
+  if(motionEventCount % 10 === 0){
     document.getElementById('debugPanel').textContent =
-      `Events: ${motionEventCount} | Interval: ${e.interval?.toFixed(1) ?? '?'} ms\n`+
-      `acc (ohne G) x:${(e.acceleration?.x ?? 'n/a')} y:${(e.acceleration?.y ?? 'n/a')} z:${(e.acceleration?.z ?? 'n/a')}\n`+
-      `acc (mit G)  x:${(e.accelerationIncludingGravity?.x ?? 'n/a')} y:${(e.accelerationIncludingGravity?.y ?? 'n/a')} z:${(e.accelerationIncludingGravity?.z ?? 'n/a')}\n`+
-      `used ax/ay/az: ${ax.toFixed(3)} / ${ay.toFixed(3)} / ${az.toFixed(3)} m/s²\n`+
+      `Events: ${motionEventCount} | interval: ${e.interval?.toFixed(1) ?? '?'} ms\n` +
+      `acc(ohne G): x=${(e.acceleration?.x ?? 'n/a')}  y=${(e.acceleration?.y ?? 'n/a')}  z=${(e.acceleration?.z ?? 'n/a')}\n` +
+      `acc(mit G):  x=${(e.accelerationIncludingGravity?.x ?? 'n/a')}  y=${(e.accelerationIncludingGravity?.y ?? 'n/a')}  z=${(e.accelerationIncludingGravity?.z ?? 'n/a')}\n` +
+      `HP-acc: x=${ahx.toFixed(3)} y=${ahy.toFixed(3)} z=${ahz.toFixed(3)} m/s²\n` +
+      `vel:    x=${vX.toFixed(2)} y=${vY.toFixed(2)} z=${vZ.toFixed(2)} mm/s\n` +
+      `disp:   x=${sX.toFixed(2)} y=${sY.toFixed(2)} z=${sZ.toFixed(2)} mm\n` +
       `measuring: ${measuring}`;
   }
 
@@ -594,447 +871,340 @@ function handleMotion(e){
 
   const nowP = performance.now();
   if(!lastTime){ lastTime = nowP; return; }
-  const dt = (nowP - lastTime)/1000;
+  const dt = (nowP - lastTime) / 1000;
   lastTime = nowP;
-  if(dt<=0 || dt>0.2) return;
+  if(dt <= 0 || dt > 0.2) return;
 
-  // Hochpass
-  hpX=HP*(hpX+ax-lastAX);
-  hpY=HP*(hpY+ay-lastAY);
-  hpZ=HP*(hpZ+az-lastAZ);
-  lastAX=ax; lastAY=ay; lastAZ=az;
+  // Hochpassfilter
+  ahx = HP * (ahx + arx - lastAX);
+  ahy = HP * (ahy + ary - lastAY);
+  ahz = HP * (ahz + arz - lastAZ);
+  lastAX = arx; lastAY = ary; lastAZ = arz;
 
-  // Integration -> mm/s
-  vX=(vX+hpX*dt*1000)*LEAK;
-  vY=(vY+hpY*dt*1000)*LEAK;
-  vZ=(vZ+hpZ*dt*1000)*LEAK;
+  // Beschleunigung (m/s²)
+  const ax = Math.abs(ahx), ay = Math.abs(ahy), az = Math.abs(ahz);
+  const at = Math.sqrt(ahx*ahx + ahy*ahy + ahz*ahz);
 
-  const vx=Math.abs(vX), vy=Math.abs(vY), vz=Math.abs(vZ);
-  const vt=Math.sqrt(vX*vX + vY*vY + vZ*vZ);
+  // Geschwindigkeit (mm/s)
+  vX = (vX + ahx * dt * 1000) * LEAK_V;
+  vY = (vY + ahy * dt * 1000) * LEAK_V;
+  vZ = (vZ + ahz * dt * 1000) * LEAK_V;
+  const vx = Math.abs(vX), vy = Math.abs(vY), vz = Math.abs(vZ);
+  const vt = Math.sqrt(vX*vX + vY*vY + vZ*vZ);
 
-  // Stats (Total)
-  if(vt>peakTotal) peakTotal = vt;
-  squaredSumTotal += vt*vt;
-  sampleCount++;
+  // Verschiebung (mm)
+  sX = (sX + vX * dt) * LEAK_S;
+  sY = (sY + vY * dt) * LEAK_S;
+  sZ = (sZ + vZ * dt) * LEAK_S;
+  const sx = Math.abs(sX), sy = Math.abs(sY), sz = Math.abs(sZ);
+  const st_val = Math.sqrt(sX*sX + sY*sY + sZ*sZ);
 
-  const t = Date.now();
-  history.push({t,vx,vy,vz,vt});
+  // Stats
+  stats.vel.peak  = Math.max(stats.vel.peak,  vt);    stats.vel.sum2  += vt*vt;     stats.vel.count++;
+  stats.acc.peak  = Math.max(stats.acc.peak,  at);    stats.acc.sum2  += at*at;     stats.acc.count++;
+  stats.disp.peak = Math.max(stats.disp.peak, st_val);stats.disp.sum2 += st_val*st_val; stats.disp.count++;
+
+  const t   = Date.now();
+  const point = { t, ax,ay,az,at, vx,vy,vz,vt, sx,sy,sz,st:st_val, arx,ary,arz };
+
+  history.push(point);
   while(history.length && history[0].t < t - LIVE_WINDOW_MS) history.shift();
+  if(recorded.length < MAX_RECORDED_POINTS) recorded.push(point);
 
-  if(recorded.length < MAX_RECORDED_POINTS){
-    recorded.push({
-      t,
-      vx:+vx.toFixed(3), vy:+vy.toFixed(3), vz:+vz.toFixed(3), vt:+vt.toFixed(3),
-      ax:+ax.toFixed(3), ay:+ay.toFixed(3), az:+az.toFixed(3)
-    });
-  }
-
-  updateUI(vx,vy,vz,vt);
-}
-
-/* ========= UI ========= */
-function updateUI(vx,vy,vz,vt){
-  document.getElementById('vxVal').textContent = vx.toFixed(2);
-  document.getElementById('vyVal').textContent = vy.toFixed(2);
-  document.getElementById('vzVal').textContent = vz.toFixed(2);
-  document.getElementById('vtVal').textContent = vt.toFixed(2);
-
-  document.getElementById('peakVal').textContent = peakTotal.toFixed(2);
-  const rms = sampleCount>0 ? Math.sqrt(squaredSumTotal/sampleCount) : 0;
-  document.getElementById('rmsVal').textContent = rms.toFixed(2);
-
-  updateMainDisplay(vx,vy,vz,vt);
-  highlightNorm(peakTotal);
-
+  updateDinNote();
+  updateUIFromPoint(point);
   drawLive();
 }
 
-/* ========= Zeichnen ========= */
-function drawGrid(ctx,W,H){
+/* ════════════════════════════════════════════
+   Zeichnen
+════════════════════════════════════════════ */
+function drawGrid(ctx, W, H){
   ctx.clearRect(0,0,W,H);
-  ctx.fillStyle='#0a0a0a'; ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#1e1e1e'; ctx.lineWidth=1;
+  ctx.fillStyle = '#0b0b0c'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = '#1f1f22'; ctx.lineWidth = 1;
   for(let i=1;i<5;i++){ ctx.beginPath(); ctx.moveTo(i*W/5,0); ctx.lineTo(i*W/5,H); ctx.stroke(); }
   for(let i=1;i<4;i++){ ctx.beginPath(); ctx.moveTo(0,i*H/4); ctx.lineTo(W,i*H/4); ctx.stroke(); }
 }
-function drawSeries(ctx,pts,W,H,key,color,scale,t0,t1,thick=false){
-  if(pts.length<2) return;
-  ctx.strokeStyle=color;
-  ctx.lineWidth = thick ? 2.6 : 1.6;
+
+function computeScale(points){
+  let mx = 1;
+  for(const p of points){
+    const v = pickValues(p);
+    if(visible.x) mx = Math.max(mx, v.x);
+    if(visible.y) mx = Math.max(mx, v.y);
+    if(visible.z) mx = Math.max(mx, v.z);
+    if(visible.t) mx = Math.max(mx, v.t);
+  }
+  return mx * 1.15;
+}
+
+function drawSeries(ctx, pts, W, H, axisKey, color, scale, t0, t1, thick){
+  if(pts.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = thick ? 2.8 : 1.7;
   ctx.beginPath();
-  for(let i=0;i<pts.length;i++){
-    const p=pts[i];
-    const x=((p.t-t0)/(t1-t0))*W;
-    const y=H-(p[key]/scale)*H*0.88;
-    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  for(let i = 0; i < pts.length; i++){
+    const p = pts[i];
+    const val = pickValues(p)[axisKey];
+    const x = ((p.t - t0) / (t1 - t0)) * W;
+    const y = H - (val / scale) * H * 0.88;
+    if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
   ctx.stroke();
 }
 
-function computeScaleFromVisible(points){
-  let mx=1;
-  for(const p of points){
-    if(visible.vx) mx=Math.max(mx,p.vx);
-    if(visible.vy) mx=Math.max(mx,p.vy);
-    if(visible.vz) mx=Math.max(mx,p.vz);
-    if(visible.vt) mx=Math.max(mx,p.vt);
-  }
-  return mx*1.15;
-}
-
 function drawLive(){
-  const {W,H}=setupCanvas(liveC,liveCtx);
-  drawGrid(liveCtx,W,H);
-  if(history.length<2) return;
+  const {W,H} = setupCanvas(liveC, liveCtx);
+  drawGrid(liveCtx, W, H);
+  if(history.length < 2) return;
 
-  const t1=Date.now(), t0=t1-LIVE_WINDOW_MS;
-  const scale = computeScaleFromVisible(history);
+  const t1    = Date.now();
+  const t0    = t1 - LIVE_WINDOW_MS;
+  const scale = computeScale(history);
 
-  if(visible.vx) drawSeries(liveCtx,history,W,H,'vx','#ff4444',scale,t0,t1,false);
-  if(visible.vy) drawSeries(liveCtx,history,W,H,'vy','#00cc66',scale,t0,t1,false);
-  if(visible.vz) drawSeries(liveCtx,history,W,H,'vz','#4499ff',scale,t0,t1,false);
-  if(visible.vt) drawSeries(liveCtx,history,W,H,'vt','#FFE600',scale,t0,t1,true);
+  if(visible.x) drawSeries(liveCtx, history, W, H, 'x', '#ff4444', scale, t0, t1, false);
+  if(visible.y) drawSeries(liveCtx, history, W, H, 'y', '#00cc66', scale, t0, t1, false);
+  if(visible.z) drawSeries(liveCtx, history, W, H, 'z', '#4499ff', scale, t0, t1, false);
+  if(visible.t) drawSeries(liveCtx, history, W, H, 't', '#FFE600', scale, t0, t1, true);
 
-  liveCtx.fillStyle='#444'; liveCtx.font='11px Arial';
-  liveCtx.fillText(`Skala: ${scale.toFixed(1)} mm/s`,8,14);
+  liveCtx.fillStyle = '#555'; liveCtx.font = '11px Arial';
+  liveCtx.fillText(`Skala: ${scale.toFixed(2)} ${unitLabel()}`, 8, 14);
 
-  const ax=document.getElementById('liveAxis');
-  ax.innerHTML='';
-  for(let i=0;i<=5;i++){
-    const sp=document.createElement('span');
-    const sec=(-(LIVE_WINDOW_MS/1000)+(LIVE_WINDOW_MS/1000)*(i/5)).toFixed(0);
-    sp.textContent=sec==='0'?'jetzt':`${sec}s`;
+  const ax = document.getElementById('liveAxis');
+  ax.innerHTML = '';
+  for(let i = 0; i <= 5; i++){
+    const sp  = document.createElement('span');
+    const sec = (-(LIVE_WINDOW_MS/1000) + (LIVE_WINDOW_MS/1000) * (i/5)).toFixed(0);
+    sp.textContent = sec === '0' ? 'jetzt' : `${sec}s`;
     ax.appendChild(sp);
   }
 }
 
 function drawResult(){
   if(!recorded.length) return;
-  const {W,H}=setupCanvas(resC,resCtx);
-  drawGrid(resCtx,W,H);
-  if(recorded.length<2) return;
+  const {W,H} = setupCanvas(resC, resCtx);
+  drawGrid(resCtx, W, H);
+  if(recorded.length < 2) return;
 
-  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
-  const scale = computeScaleFromVisible(recorded);
+  const t0    = recorded[0].t;
+  const t1    = recorded[recorded.length - 1].t;
+  const scale = computeScale(recorded);
 
-  if(visible.vx) drawSeries(resCtx,recorded,W,H,'vx','#ff4444',scale,t0,t1,false);
-  if(visible.vy) drawSeries(resCtx,recorded,W,H,'vy','#00cc66',scale,t0,t1,false);
-  if(visible.vz) drawSeries(resCtx,recorded,W,H,'vz','#4499ff',scale,t0,t1,false);
-  if(visible.vt) drawSeries(resCtx,recorded,W,H,'vt','#FFE600',scale,t0,t1,true);
+  if(visible.x) drawSeries(resCtx, recorded, W, H, 'x', '#ff4444', scale, t0, t1, false);
+  if(visible.y) drawSeries(resCtx, recorded, W, H, 'y', '#00cc66', scale, t0, t1, false);
+  if(visible.z) drawSeries(resCtx, recorded, W, H, 'z', '#4499ff', scale, t0, t1, false);
+  if(visible.t) drawSeries(resCtx, recorded, W, H, 't', '#FFE600', scale, t0, t1, true);
 
-  resCtx.fillStyle='#444'; resCtx.font='11px Arial';
-  resCtx.fillText(`Skala: ${scale.toFixed(1)} mm/s`,8,14);
+  resCtx.fillStyle = '#555'; resCtx.font = '11px Arial';
+  resCtx.fillText(`Skala: ${scale.toFixed(2)} ${unitLabel()}`, 8, 14);
 
-  const durS=(t1-t0)/1000;
-  const ax=document.getElementById('resAxis');
-  ax.innerHTML='';
-  for(let i=0;i<=5;i++){
-    const sp=document.createElement('span');
-    sp.textContent=`${(durS*(i/5)).toFixed(1)}s`;
+  const durS = (t1 - t0) / 1000;
+  const ax   = document.getElementById('resAxis');
+  ax.innerHTML = '';
+  for(let i = 0; i <= 5; i++){
+    const sp = document.createElement('span');
+    sp.textContent = `${(durS * i/5).toFixed(1)}s`;
     ax.appendChild(sp);
   }
 }
 
-/* ========= Start/Stop/Reset ========= */
+/* ════════════════════════════════════════════
+   Start / Stop / Reset
+════════════════════════════════════════════ */
 function toggleMeasurement(){ measuring ? stopMeasurement() : startMeasurement(); }
 
 function startMeasurement(){
-  measuring=true; lastTime=null; measureStart=Date.now();
-  motionEventCount=0;
+  measuring = true; lastTime = null; measureStart = Date.now();
+  motionEventCount = 0;
 
-  vX=vY=vZ=hpX=hpY=hpZ=lastAX=lastAY=lastAZ=0;
-  peakTotal=0; squaredSumTotal=0; sampleCount=0;
-  history=[]; recorded=[];
+  ahx=ahy=ahz=0; lastAX=lastAY=lastAZ=0;
+  vX=vY=vZ=0; sX=sY=sZ=0;
 
-  document.getElementById('evtVal').textContent='0';
-  document.getElementById('durBadge').textContent='00:00';
-  document.getElementById('resultsPanel').style.display='none';
-  document.getElementById('linkArea').style.display='none';
+  for(const m of ['vel','acc','disp']){
+    stats[m].peak = 0; stats[m].sum2 = 0; stats[m].count = 0;
+  }
+  history = []; recorded = [];
 
-  const startBtn=document.getElementById('startBtn');
-  startBtn.textContent='Stop';
-  startBtn.className='btn btn-stop';
+  document.getElementById('evtVal').textContent = '0';
+  document.getElementById('durVal').textContent = '00:00';
+  document.getElementById('resultsPanel').style.display = 'none';
+  document.getElementById('linkArea').style.display     = 'none';
 
-  setStatus('MESSUNG LÄUFT …','running');
-  document.getElementById('debugPanel').textContent='Warte auf Events …';
+  const sb = document.getElementById('startBtn');
+  sb.textContent = 'Stop'; sb.className = 'btn btn-stop';
+
+  setStatus('MESSUNG LÄUFT …', 'running');
 
   clearInterval(durationTimer);
-  durationTimer=setInterval(()=>{
-    document.getElementById('durBadge').textContent = fmtTime(Date.now()-measureStart);
-  },500);
+  durationTimer = setInterval(()=>{
+    document.getElementById('durVal').textContent = fmtTime(Date.now() - measureStart);
+  }, 500);
 
   clearTimeout(noDataTimer);
-  noDataTimer=setTimeout(()=>{
-    if(motionEventCount===0){
-      setStatus('Keine Sensor-Daten (devicemotion).','error');
-      document.getElementById('debugPanel').textContent =
-        'devicemotion Events: 0 nach 2 Sekunden.\n\n' +
-        'Bitte prüfen:\n' +
-        '- Chrome: Website-Einstellungen -> Bewegungssensoren -> Zulassen\n' +
-        '- Android: "Sensoren aus" deaktivieren (Quick Settings)\n' +
-        '- Energiesparmodus aus\n' +
-        '- Alternativ: Firefox / Samsung Internet testen';
+  noDataTimer = setTimeout(()=>{
+    if(motionEventCount === 0){
+      setStatus('Keine Sensor-Daten (devicemotion). Berechtigungen prüfen!', 'error');
     }
-  },2000);
+  }, 2000);
 }
 
 function stopMeasurement(){
-  measuring=false;
+  measuring = false;
   clearInterval(durationTimer);
   clearTimeout(noDataTimer);
 
-  const startBtn=document.getElementById('startBtn');
-  startBtn.textContent='Start';
-  startBtn.className='btn btn-primary';
+  const sb = document.getElementById('startBtn');
+  sb.textContent = 'Start'; sb.className = 'btn btn-primary';
 
-  setStatus('Messung abgeschlossen','done');
-
+  setStatus('Messung abgeschlossen', 'done');
   if(recorded.length) showResults();
 }
 
 function resetAll(){
   if(measuring) stopMeasurement();
+  setStatus('');
 
-  peakTotal=0; squaredSumTotal=0; sampleCount=0;
-  history=[]; recorded=[];
-  vX=vY=vZ=hpX=hpY=hpZ=lastAX=lastAY=lastAZ=0;
+  history = []; recorded = [];
+  ahx=ahy=ahz=0; lastAX=lastAY=lastAZ=0;
+  vX=vY=vZ=0; sX=sY=sZ=0;
 
-  ['vxVal','vyVal','vzVal','vtVal','peakVal','rmsVal'].forEach(id=>document.getElementById(id).textContent='0.00');
-  document.getElementById('evtVal').textContent='0';
-  document.getElementById('durBadge').textContent='00:00';
-
-  document.getElementById('mainNum').textContent='0.00';
-  document.getElementById('mainNum').style.color='#FFE600';
-  document.getElementById('mainSub').textContent='mm/s (Total)';
-
-  document.getElementById('resultsPanel').style.display='none';
-  document.getElementById('linkArea').style.display='none';
-  document.getElementById('debugPanel').textContent='Warte auf Sensor-Daten …';
-
-  ['n0','n1','n2','n3','n4'].forEach(id=>document.getElementById(id).classList.remove('active-norm'));
-  setStatus('Bereit – Drücke Start');
-
+  ['xVal','yVal','zVal','tVal','peakVal','rmsVal'].forEach(id =>
+    document.getElementById(id).textContent = '0.00');
+  document.getElementById('evtVal').textContent   = '0';
+  document.getElementById('durVal').textContent   = '00:00';
+  document.getElementById('mainNum').textContent  = '0.00';
+  document.getElementById('mainNum').style.color  = '#FFE600';
+  document.getElementById('mainSub').textContent  = `${unitLabel()} (Total)`;
+  document.getElementById('resultsPanel').style.display = 'none';
+  document.getElementById('linkArea').style.display     = 'none';
+  ['n0','n1','n2','n3','n4'].forEach(id =>
+    document.getElementById(id).classList.remove('active-norm'));
   drawLive();
 }
 
-/* ========= Results ========= */
+/* ════════════════════════════════════════════
+   Ergebnisse anzeigen
+════════════════════════════════════════════ */
 function showResults(){
-  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
-  const dur=((t1-t0)/1000).toFixed(1);
-  const rms=sampleCount>0?Math.sqrt(squaredSumTotal/sampleCount):0;
+  const t0  = recorded[0].t, t1 = recorded[recorded.length-1].t;
+  const dur = ((t1 - t0)/1000).toFixed(1);
+  const st  = stats[unitMode];
+  const rms = st.count > 0 ? Math.sqrt(st.sum2/st.count) : 0;
+  const u   = unitLabel();
 
   document.getElementById('resMeta').textContent =
-    `${new Date(t0).toLocaleString('de-DE')} · Dauer: ${dur}s · Peak(Total): ${peakTotal.toFixed(2)} mm/s · RMS(Total): ${rms.toFixed(2)} mm/s · Punkte: ${recorded.length}`;
+    `${new Date(t0).toLocaleString('de-DE')} · Dauer: ${dur}s · ` +
+    `Peak: ${st.peak.toFixed(2)} ${u} · RMS: ${rms.toFixed(2)} ${u} · ` +
+    `Punkte: ${recorded.length}`;
 
-  document.getElementById('resultsPanel').style.display='block';
-  setTimeout(()=>{ resizeAll(); drawResult(); },80);
+  document.getElementById('resultsPanel').style.display = 'block';
+  setTimeout(()=>{ resizeAll(); drawResult(); }, 80);
   document.getElementById('resultsPanel').scrollIntoView({behavior:'smooth'});
 }
 
-/* ========= CSV ========= */
+/* ════════════════════════════════════════════
+   CSV Export (alle Einheiten)
+════════════════════════════════════════════ */
 function exportCSV(){
   if(!recorded.length){ alert('Keine Messdaten vorhanden.'); return; }
 
-  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
-  const dur=((t1-t0)/1000).toFixed(1);
-  const rms=sampleCount>0?Math.sqrt(squaredSumTotal/sampleCount):0;
+  const t0  = recorded[0].t, t1 = recorded[recorded.length-1].t;
+  const dur = ((t1 - t0)/1000).toFixed(1);
+  const rms = stats.vel.count > 0 ? Math.sqrt(stats.vel.sum2/stats.vel.count) : 0;
 
   let csv = '# HTB Schwingungsmesser – Export\n';
   csv += `# Datum/Zeit: ${new Date(t0).toLocaleString('de-DE')}\n`;
   csv += `# Dauer: ${dur} s\n`;
   csv += `# Punkte: ${recorded.length}\n`;
-  csv += `# Peak Total: ${peakTotal.toFixed(3)} mm/s\n`;
-  csv += `# RMS Total: ${rms.toFixed(3)} mm/s\n`;
+  csv += `# Peak Vel (Total): ${stats.vel.peak.toFixed(3)} mm/s\n`;
+  csv += `# RMS  Vel (Total): ${rms.toFixed(3)} mm/s\n`;
+  csv += `# Peak Acc (Total): ${stats.acc.peak.toFixed(3)} m/s²\n`;
+  csv += `# Peak Disp(Total): ${stats.disp.peak.toFixed(3)} mm\n`;
   csv += '#\n';
-  csv += 'Zeit_ms;Zeit_s;Vx_mm_s;Vy_mm_s;Vz_mm_s;Vtotal_mm_s;Ax_m_s2;Ay_m_s2;Az_m_s2\n';
+  csv += 'Zeit_ms;Zeit_s;' +
+         'AccX_m_s2;AccY_m_s2;AccZ_m_s2;AccTotal_m_s2;' +
+         'VelX_mm_s;VelY_mm_s;VelZ_mm_s;VelTotal_mm_s;' +
+         'DispX_mm;DispY_mm;DispZ_mm;DispTotal_mm;' +
+         'RawAccX_m_s2;RawAccY_m_s2;RawAccZ_m_s2\n';
 
   for(const d of recorded){
-    const ms=d.t-t0;
-    csv += `${ms};${(ms/1000).toFixed(3)};${d.vx};${d.vy};${d.vz};${d.vt};${d.ax};${d.ay};${d.az}\n`;
+    const ms = d.t - t0;
+    csv +=
+      `${ms};${(ms/1000).toFixed(3)};` +
+      `${d.ax.toFixed(6)};${d.ay.toFixed(6)};${d.az.toFixed(6)};${d.at.toFixed(6)};` +
+      `${d.vx.toFixed(6)};${d.vy.toFixed(6)};${d.vz.toFixed(6)};${d.vt.toFixed(6)};` +
+      `${d.sx.toFixed(6)};${d.sy.toFixed(6)};${d.sz.toFixed(6)};${d.st.toFixed(6)};` +
+      `${d.arx.toFixed(6)};${d.ary.toFixed(6)};${d.arz.toFixed(6)}\n`;
   }
 
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=`HTB_Schwingung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `HTB_Messung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-/* ========= PDF Diagramm ========= */
+/* ════════════════════════════════════════════
+   PDF Export (Diagramm)
+════════════════════════════════════════════ */
 function exportPDF(){
   if(!recorded.length){ alert('Keine Messdaten vorhanden.'); return; }
-
   if(!window.jspdf || !window.jspdf.jsPDF){
-    alert('jsPDF nicht geladen. Bitte "jspdf.umd.min.js" ins Repo legen (neben index.html).');
+    alert('jsPDF nicht geladen.\nBitte jspdf.umd.min.js ins Repo legen (neben index.html).');
     return;
   }
 
-  // sicherstellen, dass Ergebnisdiagramm aktuell ist
   drawResult();
 
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+  const PW  = pdf.internal.pageSize.getWidth();
+  const PH  = pdf.internal.pageSize.getHeight();
+  const M   = 40;
 
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
-  const margin = 40;
+  const t0  = recorded[0].t, t1 = recorded[recorded.length-1].t;
+  const dur = ((t1-t0)/1000).toFixed(1);
+  const st  = stats[unitMode];
+  const rms = st.count > 0 ? Math.sqrt(st.sum2/st.count) : 0;
+  const u   = unitLabel();
 
-  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
-  const dur=((t1-t0)/1000).toFixed(1);
-  const rms=sampleCount>0?Math.sqrt(squaredSumTotal/sampleCount):0;
+  // Dunkler Hintergrund
+  pdf.setFillColor(17,17,17); pdf.rect(0,0,PW,PH,'F');
 
-  // Hintergrund dunkel
-  pdf.setFillColor(17,17,17);
-  pdf.rect(0,0,pageW,pageH,'F');
+  // Gelber Header-Streifen
+  pdf.setFillColor(255,230,0); pdf.rect(0,0,PW,44,'F');
+  pdf.setTextColor(17,17,17);
+  pdf.setFontSize(15); pdf.setFont(undefined,'bold');
+  pdf.text('HTB Baugesellschaft m.b.H. – Schwingungsmessung', M, 28);
 
-  pdf.setTextColor(255,230,0);
-  pdf.setFontSize(16);
-  pdf.text('HTB Schwingungsmesser – Diagramm', margin, 34);
+  // Infos
+  pdf.setTextColor(210,210,210); pdf.setFontSize(10); pdf.setFont(undefined,'normal');
+  pdf.text(`Start: ${new Date(t0).toLocaleString('de-DE')}   Dauer: ${dur}s   Einheit: ${u}`, M, 60);
+  pdf.text(`Peak: ${st.peak.toFixed(2)} ${u}   RMS: ${rms.toFixed(2)} ${u}   Punkte: ${recorded.length}`, M, 74);
 
-  pdf.setTextColor(210,210,210);
-  pdf.setFontSize(10);
-  pdf.text(`Start: ${new Date(t0).toLocaleString('de-DE')}   Dauer: ${dur}s`, margin, 54);
-  pdf.text(`Peak Total: ${peakTotal.toFixed(2)} mm/s   RMS Total: ${rms.toFixed(2)} mm/s`, margin, 68);
+  // Legende
+  const legendY = 88;
+  const colors  = ['#ff4444','#00cc66','#4499ff','#FFE600'];
+  const labels  = ['X','Y','Z','Total'];
+  let lx = M;
+  colors.forEach((c,i) => {
+    pdf.setFillColor(...hexToRgb(c));
+    pdf.rect(lx, legendY-6, 18, 3, 'F');
+    pdf.setTextColor(210,210,210);
+    pdf.text(labels[i], lx+22, legendY);
+    lx += 60;
+  });
 
-  // Canvas als Bild
+  // Diagramm
   const img = resC.toDataURL('image/png', 1.0);
-
-  const x = margin;
-  const y = 90;
-  const w = pageW - 2*margin;
-  const h = pageH - y - margin;
-
+  const x = M, y = 100, w = PW - 2*M, h = PH - y - M;
   pdf.addImage(img, 'PNG', x, y, w, h);
-  pdf.save(`HTB_Schwingung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.pdf`);
+
+  pdf.save(`HTB_Diagramm_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.pdf`);
 }
 
-/* ========= Share Link (Downsample) ========= */
-function toB64Url(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,''); }
-function fromB64Url(s){ let b=s.replace(/-/g,'+').replace(/_/g,'/'); while(b.length%4)b+='='; return decodeURIComponent(escape(atob(b))); }
-
-function generateShareLink(){
-  if(!recorded.length){ alert('Keine Messdaten vorhanden.'); return; }
-
-  const MAX=250;
-  const step=Math.max(1,Math.floor(recorded.length/MAX));
-  const vx=[],vy=[],vz=[],vt=[];
-  for(let i=0;i<recorded.length;i+=step){
-    vx.push(+recorded[i].vx.toFixed(2));
-    vy.push(+recorded[i].vy.toFixed(2));
-    vz.push(+recorded[i].vz.toFixed(2));
-    vt.push(+recorded[i].vt.toFixed(2));
-  }
-
-  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
-  const rms=sampleCount>0?Math.sqrt(squaredSumTotal/sampleCount):0;
-  const payload={
-    t0,
-    dt: Math.round((t1-t0)/Math.max(1,vx.length-1)),
-    vx,vy,vz,vt,
-    peak:+peakTotal.toFixed(3),
-    rms:+rms.toFixed(3),
-    visible
-  };
-
-  const link = `${window.location.href.split('#')[0]}#d=${toB64Url(JSON.stringify(payload))}`;
-  document.getElementById('linkArea').style.display='block';
-  document.getElementById('linkBox').textContent=link;
-  document.getElementById('linkNote').textContent =
-    link.length>8000 ? `Link sehr lang (${link.length} Zeichen). Für Messenger besser CSV/PDF.` : `Link bereit (${link.length} Zeichen).`;
-}
-
-function copyLink(btn){
-  const txt=document.getElementById('linkBox').textContent;
-  (navigator.clipboard?.writeText(txt)||Promise.reject())
-    .then(()=>{const o=btn.textContent;btn.textContent='Kopiert';setTimeout(()=>btn.textContent=o,1400);})
-    .catch(()=>{const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);});
-}
-
-function tryLoadFromHash(){
-  const m=location.hash.match(/#d=([A-Za-z0-9\-_]+)/);
-  if(!m) return false;
-
-  try{
-    const p=JSON.parse(fromB64Url(m[1]));
-
-    // restore visible
-    if(p.visible){
-      for(const k of ['vx','vy','vz','vt']){
-        if(typeof p.visible[k]==='boolean') visible[k]=p.visible[k];
-      }
-      // update UI off-states
-      for(const k of ['vx','vy','vz','vt']){
-        document.querySelectorAll(`[data-series="${k}"]`).forEach(el=>{
-          el.classList.toggle('off', !visible[k]);
-        });
-      }
-    }
-
-    recorded=[];
-    for(let i=0;i<p.vt.length;i++){
-      recorded.push({
-        t: p.t0 + i*p.dt,
-        vx: p.vx[i]??0, vy: p.vy[i]??0, vz: p.vz[i]??0, vt: p.vt[i]??0,
-        ax:0, ay:0, az:0
-      });
-    }
-    peakTotal=p.peak ?? Math.max(...p.vt);
-    squaredSumTotal=(p.vt||[]).reduce((s,v)=>s+v*v,0);
-    sampleCount=(p.vt||[]).length;
-
-    setStatus('Geteilte Messung geladen','done');
-    showResults();
-    return true;
-  }catch(e){
-    setStatus('Link konnte nicht geladen werden','error');
-    return false;
-  }
-}
-
-/* ========= iOS Permission ========= */
-if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
-  document.getElementById('permBtn').style.display='inline-flex';
-}
-function requestPermission(){
-  DeviceMotionEvent.requestPermission().then(state=>{
-    if(state==='granted'){
-      document.getElementById('permBtn').style.display='none';
-      setStatus('Sensorerlaubnis erteilt – Drücke Start');
-    } else setStatus('Sensorerlaubnis verweigert','error');
-  }).catch(err=>setStatus('Fehler: '+err.message,'error'));
-}
-
-/* ========= PWA Install ========= */
-let deferredPrompt=null;
-window.addEventListener('beforeinstallprompt',e=>{
-  e.preventDefault();
-  deferredPrompt=e;
-  document.getElementById('installBanner').style.display='flex';
-});
-function installPWA(){
-  if(!deferredPrompt) return;
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.finally(()=>{
-    deferredPrompt=null;
-    document.getElementById('installBanner').style.display='none';
-  });
-}
-window.addEventListener('appinstalled',()=>{
-  document.getElementById('installBanner').style.display='none';
-});
-
-/* ========= Service Worker ========= */
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
-  });
-}
-
-/* ========= Init ========= */
-window.addEventListener('devicemotion',handleMotion,{passive:true});
-if(!tryLoadFromHash()) drawLive();
-</script>
-</body>
-</html>
+function hexToRgb(hex){
+  const r = parseInt(
