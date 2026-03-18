@@ -1,5 +1,3 @@
-const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-
 'use strict';
 
 /* ══════════════════════════════════════════════
@@ -12,6 +10,9 @@ const HP_ALPHA   = 0.97;
 const LEAK_V     = 0.985;
 const LEAK_P     = 0.995;
 const EVT_THR    = 0.1;
+
+// DIN 4150-2 Grenzwerte (mm/s)
+const DIN_GUIDES = [0.3, 1.0, 3.0, 10.0];
 
 /* ══════════════════════════════════════════════
    ZUSTAND
@@ -42,7 +43,7 @@ let peakTotal = 0, rmsAcc = 0, rmsCnt = 0, evtCount = 0;
 const vis = { x:true, y:true, z:true, t:true };
 
 /* ══════════════════════════════════════════════
-   iOS ERKENNUNG (einmal, ganz oben)
+   iOS / PWA ERKENNUNG
 ══════════════════════════════════════════════ */
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent);
 const IS_STANDALONE =
@@ -88,8 +89,8 @@ const resCtx  = dom.resultChart.getContext('2d');
    FEHLER ANZEIGE
 ══════════════════════════════════════════════ */
 window.addEventListener('error', (e) => {
-  dom.statusBar.hidden    = false;
-  dom.statusBar.className = 'statusBar is-error';
+  dom.statusBar.hidden      = false;
+  dom.statusBar.className   = 'statusBar is-error';
   dom.statusBar.textContent = `JS Fehler: ${e.message} (Zeile ${e.lineno})`;
 });
 
@@ -98,6 +99,12 @@ window.addEventListener('error', (e) => {
 ══════════════════════════════════════════════ */
 function unitLabel() {
   return activeUnit === 'acc' ? 'm/s²' : activeUnit === 'disp' ? 'mm' : 'mm/s';
+}
+
+function axisMetaFromUnit(mode) {
+  if (mode === 'acc')  return { ySymbol:'a', yUnit:'m/s²' };
+  if (mode === 'disp') return { ySymbol:'s', yUnit:'mm' };
+  return { ySymbol:'v', yUnit:'mm/s' };
 }
 
 function fmtTime(ms) {
@@ -198,60 +205,7 @@ function updateDIN(vMms) {
   }
   dinRows.forEach((id, i) => $(id).classList.toggle('is-active', i === row));
 }
-// DIN 4150-2 Guide-Linien (mm/s)
-const DIN_GUIDES = [0.3, 1.0, 3.0, 10.0];
 
-function axisMetaFromUnit(unitMode) {
-  // unitMode: 'vel' | 'acc' | 'disp'
-  if (unitMode === 'acc')  return { ySymbol: 'a', yUnit: 'm/s²' };
-  if (unitMode === 'disp') return { ySymbol: 's', yUnit: 'mm' };
-  return { ySymbol: 'v', yUnit: 'mm/s' }; // vel
-}
-
-function drawAxisLabels(ctx, W, H, unitMode) {
-  const { ySymbol, yUnit } = axisMetaFromUnit(unitMode);
-
-  ctx.save();
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.font = '12px system-ui, -apple-system, Segoe UI, Arial';
-
-  // x label
-  ctx.fillText('t [s]', W - 44, H - 8);
-
-  // y label (rotated)
-  ctx.translate(14, H / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText(`${ySymbol} [${yUnit}]`, 0, 0);
-  ctx.restore();
-}
-
-function drawDinGuides(ctx, W, H, yMin, yMax, unitMode) {
-  if (unitMode !== 'vel') return;           // nur mm/s
-  if (yMax <= yMin) return;
-
-  ctx.save();
-  ctx.setLineDash([5, 5]);
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(255,237,0,0.18)'; // sehr unauffällig
-
-  const yOf = (v) => H - ((v - yMin) / (yMax - yMin)) * H;
-
-  for (const g of DIN_GUIDES) {
-    // +Linie
-    if (g >= yMin && g <= yMax) {
-      const y = yOf(g);
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
-    // -Linie (nur wenn negative Werte im Plot sichtbar sind)
-    const ng = -g;
-    if (ng >= yMin && ng <= yMax) {
-      const y = yOf(ng);
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
-  }
-
-  ctx.restore();
-}
 /* ══════════════════════════════════════════════
    HIGH-PASS + INTEGRATION
 ══════════════════════════════════════════════ */
@@ -284,62 +238,107 @@ function getValues() {
 }
 
 /* ══════════════════════════════════════════════
-   LIVE CHART
+   CHART HELPERS: ACHSEN-LABELS + DIN-LINIEN
 ══════════════════════════════════════════════ */
-// DIN 4150-2 Guide-Linien (mm/s)
-const DIN_GUIDES = [0.3, 1.0, 3.0, 10.0];
-
-function axisMetaFromUnit(unitMode) {
-  // unitMode: 'vel' | 'acc' | 'disp'
-  if (unitMode === 'acc')  return { ySymbol: 'a', yUnit: 'm/s²' };
-  if (unitMode === 'disp') return { ySymbol: 's', yUnit: 'mm' };
-  return { ySymbol: 'v', yUnit: 'mm/s' }; // vel
-}
-
-function drawAxisLabels(ctx, W, H, unitMode) {
-  const { ySymbol, yUnit } = axisMetaFromUnit(unitMode);
-
+function drawAxisLabels(ctx, W, H, mode) {
+  const { ySymbol, yUnit } = axisMetaFromUnit(mode);
   ctx.save();
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.font = '12px system-ui, -apple-system, Segoe UI, Arial';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '11px system-ui, Arial, sans-serif';
 
-  // x label
-  ctx.fillText('t [s]', W - 44, H - 8);
+  // X-Label rechts unten
+  ctx.fillText(`t [s]`, W - 38, H - 6);
 
-  // y label (rotated)
-  ctx.translate(14, H / 2);
+  // Y-Label links oben (rotiert)
+  ctx.translate(13, H / 2 + 28);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText(`${ySymbol} [${yUnit}]`, 0, 0);
   ctx.restore();
 }
 
-function drawDinGuides(ctx, W, H, yMin, yMax, unitMode) {
-  if (unitMode !== 'vel') return;           // nur mm/s
+function drawDinGuides(ctx, W, H, yMin, yMax, mode) {
+  if (mode !== 'vel') return;
   if (yMax <= yMin) return;
-
-  ctx.save();
-  ctx.setLineDash([5, 5]);
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(255,237,0,0.18)'; // sehr unauffällig
 
   const yOf = (v) => H - ((v - yMin) / (yMax - yMin)) * H;
 
+  ctx.save();
+  ctx.setLineDash([4, 6]);
+  ctx.lineWidth   = 1;
+  ctx.strokeStyle = 'rgba(255,237,0,0.18)';
+
   for (const g of DIN_GUIDES) {
-    // +Linie
+    // positive Grenze
     if (g >= yMin && g <= yMax) {
       const y = yOf(g);
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
-    // -Linie (nur wenn negative Werte im Plot sichtbar sind)
+    // negative Grenze (falls Plot ins Negative reicht)
     const ng = -g;
     if (ng >= yMin && ng <= yMax) {
       const y = yOf(ng);
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
   }
-
   ctx.restore();
 }
+
+/* ══════════════════════════════════════════════
+   LIVE CHART
+══════════════════════════════════════════════ */
+function drawLive() {
+  const cvs = dom.liveChart;
+  const ctx = liveCtx;
+  const W = cvs.getBoundingClientRect().width  || 300;
+  const H = cvs.getBoundingClientRect().height || 200;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0b0b0c';
+  ctx.fillRect(0, 0, W, H);
+
+  if (buf.len < 2) {
+    drawAxisLabels(ctx, W, H, activeUnit);
+    return;
+  }
+
+  let mn = Infinity, mx = -Infinity;
+  ['x','y','z','t'].forEach(s => {
+    if (!vis[s]) return;
+    for (let i = 0; i < buf.len; i++) {
+      const v = buf[s][(buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN];
+      if (v < mn) mn = v; if (v > mx) mx = v;
+    }
+  });
+  if (!isFinite(mn)) { mn = -1; mx = 1; }
+  const rng  = (mx - mn) || 1;
+  const yMin = mn - rng*0.12;
+  const yMax = mx + rng*0.12;
+
+  // DIN-Grenzlinien (dezent, hinter den Kurven)
+  drawDinGuides(ctx, W, H, yMin, yMax, activeUnit);
+
+  // Null-Linie
+  const y0 = H - ((0 - yMin) / (yMax - yMin)) * H;
+  ctx.strokeStyle = '#2a2a2d'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
+
+  // Serien
+  ['x','y','z','t'].forEach(s => {
+    if (!vis[s]) return;
+    ctx.strokeStyle = COLORS[s];
+    ctx.lineWidth   = s === 't' ? 2.5 : 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < buf.len; i++) {
+      const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
+      const xp  = (i / (WINDOW_LEN - 1)) * W;
+      const yp  = H - ((buf[s][idx] - yMin) / (yMax - yMin)) * H;
+      i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
+    }
+    ctx.stroke();
+  });
+
+  // Achsenbeschriftung
+  drawAxisLabels(ctx, W, H, activeUnit);
 
   dom.liveAxis.innerHTML =
     ['-10s','-8s','-6s','-4s','-2s','0s'].map(t => `<span>${t}</span>`).join('');
@@ -358,7 +357,7 @@ function drawResult(data) {
   ctx.fillStyle = '#0b0b0c';
   ctx.fillRect(0, 0, W, H);
 
-  const unitMode = data.unit || activeUnit; // wichtig: gespeicherte Einheit nutzen
+  const unitMode = data.unit || activeUnit;
 
   let mn = Infinity, mx = -Infinity;
   ['x','y','z','t'].forEach(s => {
@@ -366,21 +365,20 @@ function drawResult(data) {
   });
   if (!isFinite(mn)) { mn = -1; mx = 1; }
   const rng  = (mx - mn) || 1;
-  const yMin = mn - rng * 0.12;
-  const yMax = mx + rng * 0.12;
+  const yMin = mn - rng*0.12;
+  const yMax = mx + rng*0.12;
 
-  // DIN-Grenzen (dezent) nur bei vel
+  // DIN-Grenzlinien
   drawDinGuides(ctx, W, H, yMin, yMax, unitMode);
 
   // Null-Linie
   const y0 = H - ((0 - yMin) / (yMax - yMin)) * H;
-  ctx.strokeStyle = '#2a2a2d';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#2a2a2d'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
 
   ['x','y','z','t'].forEach(s => {
     ctx.strokeStyle = COLORS[s];
-    ctx.lineWidth   = (s === 't') ? 2.5 : 1.5;
+    ctx.lineWidth   = s === 't' ? 2.5 : 1.5;
     ctx.beginPath();
     data[s].forEach((v, i) => {
       const xp = (i / (data[s].length - 1)) * W;
@@ -390,11 +388,8 @@ function drawResult(data) {
     ctx.stroke();
   });
 
-  // Achsen-Labels im Canvas
+  // Achsenbeschriftung
   drawAxisLabels(ctx, W, H, unitMode);
-
-  dom.resAxis.innerHTML = '<span>Anfang</span><span>Ende</span>';
-}
 
   dom.resAxis.innerHTML = '<span>Anfang</span><span>Ende</span>';
 }
@@ -409,7 +404,6 @@ function onMotion(e) {
     e.acceleration.y != null &&
     e.acceleration.z != null
   ) ? e.acceleration : e.accelerationIncludingGravity;
-
   if (!a) return;
   rawX = Number(a.x) || 0;
   rawY = Number(a.y) || 0;
@@ -418,19 +412,16 @@ function onMotion(e) {
 window.addEventListener('devicemotion', onMotion, { passive: true });
 
 /* ══════════════════════════════════════════════
-   RESET / START / STOP
+   RESET
 ══════════════════════════════════════════════ */
 function resetState() {
   running = false;
-  if (rafId)      { cancelAnimationFrame(rafId); rafId = null; }
-  if (durTimer)   { clearInterval(durTimer); durTimer = null; }
-  if (noDataTimer){ clearTimeout(noDataTimer); noDataTimer = null; }
+  if (rafId)       { cancelAnimationFrame(rafId);  rafId = null; }
+  if (durTimer)    { clearInterval(durTimer);        durTimer = null; }
+  if (noDataTimer) { clearTimeout(noDataTimer);      noDataTimer = null; }
 
-  startTime = null;
-  evtCount = 0;
-  peakTotal = 0;
-  rmsAcc = 0; rmsCnt = 0;
-  motionEventCount = 0;
+  startTime = null; evtCount = 0; peakTotal = 0;
+  rmsAcc = 0; rmsCnt = 0; motionEventCount = 0;
 
   buf.ptr = 0; buf.len = 0;
   buf.x.fill(0); buf.y.fill(0); buf.z.fill(0); buf.t.fill(0);
@@ -441,56 +432,43 @@ function resetState() {
 
   hp.x = hp.y = hp.z = 0;
   hp.px = hp.py = hp.pz = 0;
-
   rawX = rawY = rawZ = 0;
 
-  rec = null;
-  savedData = null;
+  rec = null; savedData = null;
 
   dom.startBtn.textContent = 'Start';
   dom.startBtn.classList.add('btn--accent');
   dom.startBtn.classList.remove('btn--stop');
 
-  dom.mainNum.textContent = '0.00';
-  dom.mainSub.textContent = `${unitLabel()} (Total)`;
-
-  dom.xVal.textContent = '0.00';
-  dom.yVal.textContent = '0.00';
-  dom.zVal.textContent = '0.00';
-  dom.tVal.textContent = '0.00';
-
-  dom.peakVal.textContent = '0.00';
-  dom.rmsVal.textContent  = '0.00';
-  dom.evtVal.textContent  = '0';
-  dom.durVal.textContent  = '00:00';
-
-  dom.results.hidden = true;
-  dom.resMeta.textContent = '—';
-
+  dom.mainNum.textContent    = '0.00';
+  dom.mainSub.textContent    = `${unitLabel()} (Total)`;
+  dom.xVal.textContent       = '0.00';
+  dom.yVal.textContent       = '0.00';
+  dom.zVal.textContent       = '0.00';
+  dom.tVal.textContent       = '0.00';
+  dom.peakVal.textContent    = '0.00';
+  dom.rmsVal.textContent     = '0.00';
+  dom.evtVal.textContent     = '0';
+  dom.durVal.textContent     = '00:00';
+  dom.results.hidden         = true;
+  dom.resMeta.textContent    = '—';
   dom.debugPanel.textContent = 'Warte auf Sensor-Daten …';
 
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
   dinRows.forEach(id => $(id).classList.remove('is-active'));
-
   setStatus('', '');
   drawLive();
 }
 
+/* ══════════════════════════════════════════════
+   START
+══════════════════════════════════════════════ */
 function startMeasurement() {
   if (running) return;
-
-  // iOS: falls Permission nötig ist, zuerst anfordern
-  if (IS_IOS &&
-      typeof DeviceMotionEvent !== 'undefined' &&
-      typeof DeviceMotionEvent.requestPermission === 'function' &&
-      motionEventCount === 0) {
-    setStatus('iPhone: erst „iOS Sensorerlaubnis“ drücken.', 'is-error');
-    return;
-  }
-
   resetState();
-  running = true;
-  startTime = Date.now();
+
+  running          = true;
+  startTime        = Date.now();
   motionEventCount = 0;
 
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = true);
@@ -499,8 +477,7 @@ function startMeasurement() {
     unit: activeUnit,
     t0: performance.now(),
     startTs: startTime,
-    x: [], y: [], z: [], t: [],
-    velTotal: []
+    x: [], y: [], z: [], t: [], velTotal: []
   };
 
   dom.startBtn.textContent = 'Stop';
@@ -513,21 +490,23 @@ function startMeasurement() {
   }, 250);
 
   noDataTimer = setTimeout(() => {
-    if (motionEventCount === 0) {
+    if (motionEventCount === 0)
       setStatus('Keine Sensor-Daten. iPhone: Sensorerlaubnis nötig.', 'is-error');
-    }
   }, 2000);
 
   rafId = requestAnimationFrame(loop);
 }
 
+/* ══════════════════════════════════════════════
+   STOP
+══════════════════════════════════════════════ */
 function stopMeasurement() {
   if (!running) return;
   running = false;
 
-  if (rafId)      { cancelAnimationFrame(rafId); rafId = null; }
-  if (durTimer)   { clearInterval(durTimer); durTimer = null; }
-  if (noDataTimer){ clearTimeout(noDataTimer); noDataTimer = null; }
+  if (rafId)       { cancelAnimationFrame(rafId);  rafId = null; }
+  if (durTimer)    { clearInterval(durTimer);        durTimer = null; }
+  if (noDataTimer) { clearTimeout(noDataTimer);      noDataTimer = null; }
 
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
 
@@ -541,42 +520,39 @@ function stopMeasurement() {
       unit: rec.unit,
       startTs: rec.startTs,
       durationSec: (performance.now() - rec.t0) / 1000,
-      x: rec.x.slice(), y: rec.y.slice(), z: rec.z.slice(), t: rec.t.slice()
+      x: rec.x.slice(), y: rec.y.slice(),
+      z: rec.z.slice(), t: rec.t.slice()
     };
-
-    dom.results.hidden = false;
+    dom.results.hidden      = false;
     dom.resMeta.textContent =
       `${new Date(savedData.startTs).toLocaleString('de-DE')} · ` +
       `Dauer: ${savedData.durationSec.toFixed(1)} s · ` +
       `Punkte: ${savedData.t.length}`;
-
     setTimeout(() => { resizeCanvas(dom.resultChart); drawResult(savedData); }, 80);
   }
-
   rec = null;
 }
 
+/* ══════════════════════════════════════════════
+   START BUTTON (iOS Permission direkt beim Klick)
+══════════════════════════════════════════════ */
 dom.startBtn.addEventListener('click', async () => {
   try {
-    // iOS: Permission muss aus User-Geste kommen -> genau hier
     if (IS_IOS &&
         typeof DeviceMotionEvent !== 'undefined' &&
         typeof DeviceMotionEvent.requestPermission === 'function') {
-
       const res = await DeviceMotionEvent.requestPermission();
       if (res !== 'granted') {
-        setStatus('iPhone: Sensorerlaubnis verweigert. iOS-Einstellungen prüfen.', 'is-error');
+        setStatus('iPhone: Sensorerlaubnis verweigert.', 'is-error');
         return;
       }
     }
-
     running ? stopMeasurement() : startMeasurement();
-
   } catch (err) {
-    setStatus('Start-Fehler: ' + err.message, 'is-error');
-    console.error(err);
+    setStatus('Fehler: ' + err.message, 'is-error');
   }
 });
+
 dom.resetBtn.addEventListener('click', () => resetState());
 
 /* ══════════════════════════════════════════════
@@ -591,7 +567,6 @@ function loop() {
   intg.prev = now;
 
   processIMU(rawX, rawY, rawZ, dt);
-
   const { vx, vy, vz, vt } = getValues();
   const u = unitLabel();
 
@@ -600,7 +575,8 @@ function loop() {
   buf.ptr = (buf.ptr + 1) % WINDOW_LEN;
   if (buf.len < WINDOW_LEN) buf.len++;
 
-  const velTotal = Math.sqrt(intg.vx*intg.vx + intg.vy*intg.vy + intg.vz*intg.vz) * 1000;
+  const velTotal = Math.sqrt(
+    intg.vx*intg.vx + intg.vy*intg.vy + intg.vz*intg.vz) * 1000;
   if (velTotal > peakTotal) peakTotal = velTotal;
   rmsAcc += velTotal * velTotal; rmsCnt++;
   if (velTotal > EVT_THR) evtCount++;
@@ -609,7 +585,6 @@ function loop() {
   dom.yVal.textContent    = vy.toFixed(2);
   dom.zVal.textContent    = vz.toFixed(2);
   dom.tVal.textContent    = vt.toFixed(2);
-
   dom.peakVal.textContent = peakTotal.toFixed(2);
   dom.rmsVal.textContent  = rmsCnt ? Math.sqrt(rmsAcc / rmsCnt).toFixed(2) : '0.00';
   dom.evtVal.textContent  = evtCount;
@@ -620,10 +595,11 @@ function loop() {
     if (vis.x) cand.push({ k:'X', v:Math.abs(vx) });
     if (vis.y) cand.push({ k:'Y', v:Math.abs(vy) });
     if (vis.z) cand.push({ k:'Z', v:Math.abs(vz) });
-    if (cand.length) { cand.sort((a,b) => b.v - a.v); main = cand[0].v; sub = `${u} (${cand[0].k})`; }
-    else { main = 0; sub = `${u} (–)`; }
+    if (cand.length) {
+      cand.sort((a,b) => b.v - a.v);
+      main = cand[0].v; sub = `${u} (${cand[0].k})`;
+    } else { main = 0; sub = `${u} (–)`; }
   }
-
   dom.mainNum.textContent = main.toFixed(2);
   dom.mainSub.textContent = sub;
 
@@ -638,17 +614,19 @@ function loop() {
     `Events=${evtCount} | dt=${(dt*1000).toFixed(1)} ms | unit=${activeUnit}`;
 
   if (rec && rec.t.length < MAX_REC) {
-    rec.x.push(vx); rec.y.push(vy); rec.z.push(vz); rec.t.push(vt);
+    rec.x.push(vx); rec.y.push(vy);
+    rec.z.push(vz); rec.t.push(vt);
     rec.velTotal.push(velTotal);
   }
 }
 
 /* ══════════════════════════════════════════════
-   CSV
+   CSV EXPORT
 ══════════════════════════════════════════════ */
 function exportCSV() {
   if (!savedData) return;
-  const u  = savedData.unit === 'vel' ? 'mm/s' : savedData.unit === 'acc' ? 'm/s²' : 'mm';
+  const u  = savedData.unit === 'vel' ? 'mm/s'
+           : savedData.unit === 'acc' ? 'm/s²' : 'mm';
   const n  = savedData.t.length;
   const dt = savedData.durationSec / Math.max(1, n - 1);
 
@@ -657,9 +635,10 @@ function exportCSV() {
   csv += `# Dauer: ${savedData.durationSec.toFixed(2)} s\n`;
   csv += `# Einheit: ${u}\n#\n`;
   csv += `i;time_s;x_${u};y_${u};z_${u};total_${u}\n`;
-
   for (let i = 0; i < n; i++) {
-    csv += `${i};${(i*dt).toFixed(4)};${savedData.x[i].toFixed(6)};${savedData.y[i].toFixed(6)};${savedData.z[i].toFixed(6)};${savedData.t[i].toFixed(6)}\n`;
+    csv += `${i};${(i*dt).toFixed(4)};` +
+           `${savedData.x[i].toFixed(6)};${savedData.y[i].toFixed(6)};` +
+           `${savedData.z[i].toFixed(6)};${savedData.t[i].toFixed(6)}\n`;
   }
 
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
@@ -673,27 +652,23 @@ function exportCSV() {
 $('csvBtn').addEventListener('click', exportCSV);
 
 /* ══════════════════════════════════════════════
-   PDF (wie vorher)
+   PDF EXPORT (3 Plots, A4, weiß, DIN-Linien)
 ══════════════════════════════════════════════ */
-/* ══════════════════════════════════════════════
-   PDF (3 Plots, wissenschaftlich, A4, weiß)
-══════════════════════════════════════════════ */
-function plotToDataURL({ series, title, unit, color, durationSec }) {
-  const W = 1200, H = 260;
-  const mL = 70, mR = 18, mT = 28, mB = 46;
+function plotToDataURL({ series, title, unit, color, durationSec, unitMode }) {
+  const W = 1200, H = 280;
+  const mL = 72, mR = 18, mT = 34, mB = 50;
   const pw = W - mL - mR, ph = H - mT - mB;
 
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
-  // weißer Hintergrund
+  // Hintergrund
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, H);
 
   // Gitternetz
-  ctx.strokeStyle = '#e6e6e6';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#ececec'; ctx.lineWidth = 1;
   for (let i = 0; i <= 10; i++) {
     const x = mL + (i/10)*pw;
     ctx.beginPath(); ctx.moveTo(x, mT); ctx.lineTo(x, mT+ph); ctx.stroke();
@@ -703,7 +678,7 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
     ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL+pw, y); ctx.stroke();
   }
 
-  // Min/Max berechnen
+  // Min/Max
   let mn = Infinity, mx = -Infinity;
   for (const v of series) { if (v < mn) mn = v; if (v > mx) mx = v; }
   if (!isFinite(mn) || !isFinite(mx)) { mn = -1; mx = 1; }
@@ -712,43 +687,66 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
   mn -= pad; mx += pad;
   const yOf = (v) => mT + ph - ((v - mn) / (mx - mn)) * ph;
 
+  // DIN-Grenzlinien im PDF (dezent grau)
+  if (unitMode === 'vel') {
+    ctx.save();
+    ctx.setLineDash([5, 6]);
+    ctx.lineWidth   = 1;
+    ctx.strokeStyle = 'rgba(180,160,0,0.35)';
+    for (const g of DIN_GUIDES) {
+      if (g >= mn && g <= mx) {
+        const y = yOf(g);
+        ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL+pw, y); ctx.stroke();
+        ctx.fillStyle = '#999';
+        ctx.font = '10px Arial';
+        ctx.fillText(`${g} mm/s`, mL+pw+2, y+4);
+      }
+      const ng = -g;
+      if (ng >= mn && ng <= mx) {
+        const y = yOf(ng);
+        ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL+pw, y); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   // Achsen
-  ctx.strokeStyle = '#111';
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 1.3;
   ctx.beginPath();
-  ctx.moveTo(mL, mT);
-  ctx.lineTo(mL, mT+ph);
-  ctx.lineTo(mL+pw, mT+ph);
+  ctx.moveTo(mL, mT); ctx.lineTo(mL, mT+ph); ctx.lineTo(mL+pw, mT+ph);
   ctx.stroke();
 
   // Titel
-  ctx.fillStyle = '#111';
-  ctx.font = 'bold 14px Arial';
-  ctx.fillText(title, mL, 18);
+  ctx.fillStyle = color; ctx.font = 'bold 15px Arial';
+  ctx.fillText(title, mL, 22);
 
-  // Y-Einheit
-  ctx.fillStyle = '#333';
-  ctx.font = '12px Arial';
-  ctx.fillText(unit, 14, mT+12);
+  // Y-Label
+  ctx.save();
+  ctx.fillStyle = '#333'; ctx.font = '12px Arial';
+  ctx.translate(14, mT + ph/2 + 20);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText(unit, 0, 0);
+  ctx.restore();
 
   // Y-Ticks
-  ctx.font = '11px Arial';
+  ctx.fillStyle = '#333'; ctx.font = '11px Arial';
   for (let j = 0; j <= 6; j++) {
     const vv = mn + (j/6)*(mx-mn);
-    ctx.fillText(vv.toFixed(2), 10, yOf(vv)+4);
+    ctx.fillText(vv.toFixed(2), 4, yOf(vv)+4);
   }
 
-  // X-Ticks (Zeit)
+  // X-Ticks
   for (let i = 0; i <= 5; i++) {
     const t = durationSec*(i/5);
     const x = mL + (i/5)*pw;
-    ctx.fillText(t.toFixed(1), x-8, H-18);
+    ctx.fillText(t.toFixed(1), x-8, H-22);
   }
-  ctx.fillText('t [s]', mL+pw-30, H-4);
+  ctx.fillStyle = '#333'; ctx.font = '12px Arial';
+  ctx.fillText('t [s]', mL+pw-28, H-8);
 
   // Messlinie
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.setLineDash([]);
   ctx.beginPath();
   const n = series.length;
   for (let i = 0; i < n; i++) {
@@ -763,99 +761,58 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
 
 function exportPDF() {
   if (!savedData) {
-    setStatus('Keine Messdaten vorhanden – erst messen!', 'is-error');
+    setStatus('Keine Messdaten – erst messen!', 'is-error');
     return;
   }
 
-  const unit = savedData.unit === 'vel' ? 'mm/s'
-             : savedData.unit === 'acc' ? 'm/s²' : 'mm';
-  const dur  = savedData.durationSec;
+  const unit     = savedData.unit === 'vel' ? 'mm/s'
+                 : savedData.unit === 'acc' ? 'm/s²' : 'mm';
+  const unitMode = savedData.unit || 'vel';
+  const dur      = savedData.durationSec;
 
-  const imgX = plotToDataURL({
-    series: savedData.x, title: 'X-Achse',
-    unit, color: '#ff4444', durationSec: dur
-  });
-  const imgY = plotToDataURL({
-    series: savedData.y, title: 'Y-Achse',
-    unit, color: '#00cc66', durationSec: dur
-  });
-  const imgZ = plotToDataURL({
-    series: savedData.z, title: 'Z-Achse',
-    unit, color: '#4499ff', durationSec: dur
-  });
+  const imgX = plotToDataURL({ series:savedData.x, title:'X-Achse', unit, color:'#ff4444', durationSec:dur, unitMode });
+  const imgY = plotToDataURL({ series:savedData.y, title:'Y-Achse', unit, color:'#00cc66', durationSec:dur, unitMode });
+  const imgZ = plotToDataURL({ series:savedData.z, title:'Z-Achse', unit, color:'#4499ff', durationSec:dur, unitMode });
 
   const w = window.open('', '_blank');
-  if (!w) {
-    setStatus('Popup blockiert – bitte Popups erlauben!', 'is-error');
-    return;
-  }
+  if (!w) { setStatus('Popup blockiert – bitte erlauben!', 'is-error'); return; }
 
   w.document.open();
   w.document.write(`<!doctype html><html><head>
 <meta charset="utf-8"/>
 <title>HTB Schwingungsmesser – Diagramme</title>
 <style>
-  @page { size: A4 portrait; margin: 12mm; }
-  body {
-    font-family: Arial, sans-serif;
-    background: #fff;
-    color: #111;
-    margin: 0;
-    padding: 12mm;
-  }
-  h1 { font-size: 16px; margin: 0 0 6px; }
-  .meta {
-    font-size: 11px;
-    color: #333;
-    line-height: 1.5;
-    margin-bottom: 12px;
-    border-bottom: 1px solid #ddd;
-    padding-bottom: 8px;
-  }
-  .plot { margin: 10px 0; page-break-inside: avoid; }
-  .plot img { width: 100%; border: 1px solid #ddd; border-radius: 4px; }
-  .plot-title {
-    font-size: 12px;
-    font-weight: bold;
-    color: #333;
-    margin-bottom: 2px;
-  }
+  @page { size:A4 portrait; margin:10mm; }
+  body  { font-family:Arial,sans-serif; background:#fff; color:#111;
+          margin:0; padding:10mm; }
+  h1    { font-size:15px; margin:0 0 5px; }
+  .meta { font-size:10px; color:#444; line-height:1.5;
+          margin-bottom:10px; border-bottom:1px solid #ddd; padding-bottom:6px; }
+  .plot { margin:8px 0; page-break-inside:avoid; }
+  .plot img { width:100%; border:1px solid #ddd; }
+  .din-legend { font-size:9px; color:#999; margin-top:4px; }
 </style>
 </head><body>
 <h1>HTB Schwingungsmesser – Messbericht</h1>
 <div class="meta">
-  <b>Start:</b> ${new Date(savedData.startTs).toLocaleString('de-DE')}<br/>
+  <b>Start:</b> ${new Date(savedData.startTs).toLocaleString('de-DE')} &nbsp;·&nbsp;
   <b>Dauer:</b> ${dur.toFixed(1)} s &nbsp;·&nbsp;
   <b>Einheit:</b> ${unit} &nbsp;·&nbsp;
   <b>Punkte:</b> ${savedData.t.length}<br/>
-  <b>Hinweis:</b> Smartphone-Sensoren sind nicht kalibriert –
-  Werte dienen der Orientierung.
+  Smartphone-Sensoren sind nicht kalibriert – Werte zur Orientierung.
+  ${unitMode === 'vel' ? '<br/><b>Gestrichelte Linien:</b> DIN 4150-2 Grenzwerte (0.3 / 1.0 / 3.0 / 10.0 mm/s)' : ''}
 </div>
-
-<div class="plot">
-  <div class="plot-title" style="color:#ff4444">X-Achse</div>
-  <img src="${imgX}" alt="X-Achse">
-</div>
-
-<div class="plot">
-  <div class="plot-title" style="color:#00cc66">Y-Achse</div>
-  <img src="${imgY}" alt="Y-Achse">
-</div>
-
-<div class="plot">
-  <div class="plot-title" style="color:#4499ff">Z-Achse</div>
-  <img src="${imgZ}" alt="Z-Achse">
-</div>
-
-<script>setTimeout(() => window.print(), 250);<\/script>
+<div class="plot"><img src="${imgX}" alt="X-Achse"></div>
+<div class="plot"><img src="${imgY}" alt="Y-Achse"></div>
+<div class="plot"><img src="${imgZ}" alt="Z-Achse"></div>
+<script>setTimeout(()=>window.print(),250);<\/script>
 </body></html>`);
   w.document.close();
 }
-
 $('pdfBtn').addEventListener('click', exportPDF);
 
 /* ══════════════════════════════════════════════
-   iOS Sensor Permission Button
+   iOS SENSOR ERLAUBNIS (optionaler Button)
 ══════════════════════════════════════════════ */
 if (IS_IOS &&
     typeof DeviceMotionEvent !== 'undefined' &&
@@ -866,7 +823,7 @@ if (IS_IOS &&
       const res = await DeviceMotionEvent.requestPermission();
       if (res === 'granted') {
         dom.iosPermBtn.hidden = true;
-        setStatus('Sensorerlaubnis erteilt – jetzt Start drücken.', 'is-done');
+        setStatus('Sensorerlaubnis erteilt – drücke Start.', 'is-done');
       } else {
         setStatus('Sensorerlaubnis verweigert!', 'is-error');
       }
@@ -875,6 +832,7 @@ if (IS_IOS &&
     }
   });
 }
+
 /* ══════════════════════════════════════════════
    PWA INSTALL
 ══════════════════════════════════════════════ */
@@ -889,9 +847,8 @@ if (IS_IOS &&
   if (IS_IOS) {
     dom.installBanner.hidden = false;
     dom.installBtn.textContent = 'Anleitung';
-    dom.installBtn.onclick = () => {
+    dom.installBtn.onclick = () =>
       setStatus('iPhone: Safari → Teilen (□↑) → „Zum Home-Bildschirm"', 'is-error');
-    };
     return;
   }
 
