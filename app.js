@@ -198,7 +198,60 @@ function updateDIN(vMms) {
   }
   dinRows.forEach((id, i) => $(id).classList.toggle('is-active', i === row));
 }
+// DIN 4150-2 Guide-Linien (mm/s)
+const DIN_GUIDES = [0.3, 1.0, 3.0, 10.0];
 
+function axisMetaFromUnit(unitMode) {
+  // unitMode: 'vel' | 'acc' | 'disp'
+  if (unitMode === 'acc')  return { ySymbol: 'a', yUnit: 'm/s²' };
+  if (unitMode === 'disp') return { ySymbol: 's', yUnit: 'mm' };
+  return { ySymbol: 'v', yUnit: 'mm/s' }; // vel
+}
+
+function drawAxisLabels(ctx, W, H, unitMode) {
+  const { ySymbol, yUnit } = axisMetaFromUnit(unitMode);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = '12px system-ui, -apple-system, Segoe UI, Arial';
+
+  // x label
+  ctx.fillText('t [s]', W - 44, H - 8);
+
+  // y label (rotated)
+  ctx.translate(14, H / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(`${ySymbol} [${yUnit}]`, 0, 0);
+  ctx.restore();
+}
+
+function drawDinGuides(ctx, W, H, yMin, yMax, unitMode) {
+  if (unitMode !== 'vel') return;           // nur mm/s
+  if (yMax <= yMin) return;
+
+  ctx.save();
+  ctx.setLineDash([5, 5]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255,237,0,0.18)'; // sehr unauffällig
+
+  const yOf = (v) => H - ((v - yMin) / (yMax - yMin)) * H;
+
+  for (const g of DIN_GUIDES) {
+    // +Linie
+    if (g >= yMin && g <= yMax) {
+      const y = yOf(g);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    // -Linie (nur wenn negative Werte im Plot sichtbar sind)
+    const ng = -g;
+    if (ng >= yMin && ng <= yMax) {
+      const y = yOf(ng);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
 /* ══════════════════════════════════════════════
    HIGH-PASS + INTEGRATION
 ══════════════════════════════════════════════ */
@@ -233,46 +286,60 @@ function getValues() {
 /* ══════════════════════════════════════════════
    LIVE CHART
 ══════════════════════════════════════════════ */
-function drawLive() {
-  const cvs = dom.liveChart;
-  const ctx = liveCtx;
-  const W = cvs.getBoundingClientRect().width  || 300;
-  const H = cvs.getBoundingClientRect().height || 200;
+// DIN 4150-2 Guide-Linien (mm/s)
+const DIN_GUIDES = [0.3, 1.0, 3.0, 10.0];
 
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0b0b0c';
-  ctx.fillRect(0, 0, W, H);
-  if (buf.len < 2) return;
+function axisMetaFromUnit(unitMode) {
+  // unitMode: 'vel' | 'acc' | 'disp'
+  if (unitMode === 'acc')  return { ySymbol: 'a', yUnit: 'm/s²' };
+  if (unitMode === 'disp') return { ySymbol: 's', yUnit: 'mm' };
+  return { ySymbol: 'v', yUnit: 'mm/s' }; // vel
+}
 
-  let mn = Infinity, mx = -Infinity;
-  ['x','y','z','t'].forEach(s => {
-    if (!vis[s]) return;
-    for (let i = 0; i < buf.len; i++) {
-      const v = buf[s][(buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN];
-      if (v < mn) mn = v; if (v > mx) mx = v;
+function drawAxisLabels(ctx, W, H, unitMode) {
+  const { ySymbol, yUnit } = axisMetaFromUnit(unitMode);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = '12px system-ui, -apple-system, Segoe UI, Arial';
+
+  // x label
+  ctx.fillText('t [s]', W - 44, H - 8);
+
+  // y label (rotated)
+  ctx.translate(14, H / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(`${ySymbol} [${yUnit}]`, 0, 0);
+  ctx.restore();
+}
+
+function drawDinGuides(ctx, W, H, yMin, yMax, unitMode) {
+  if (unitMode !== 'vel') return;           // nur mm/s
+  if (yMax <= yMin) return;
+
+  ctx.save();
+  ctx.setLineDash([5, 5]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255,237,0,0.18)'; // sehr unauffällig
+
+  const yOf = (v) => H - ((v - yMin) / (yMax - yMin)) * H;
+
+  for (const g of DIN_GUIDES) {
+    // +Linie
+    if (g >= yMin && g <= yMax) {
+      const y = yOf(g);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
-  });
-  if (!isFinite(mn)) { mn = -1; mx = 1; }
-  const rng = (mx - mn) || 1;
-  const yMin = mn - rng*0.12, yMax = mx + rng*0.12;
-
-  const y0 = H - ((0 - yMin) / (yMax - yMin)) * H;
-  ctx.strokeStyle = '#2a2a2d'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
-
-  ['x','y','z','t'].forEach(s => {
-    if (!vis[s]) return;
-    ctx.strokeStyle = COLORS[s];
-    ctx.lineWidth   = s === 't' ? 2.5 : 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < buf.len; i++) {
-      const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
-      const xp  = (i / (WINDOW_LEN - 1)) * W;
-      const yp  = H - ((buf[s][idx] - yMin) / (yMax - yMin)) * H;
-      i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
+    // -Linie (nur wenn negative Werte im Plot sichtbar sind)
+    const ng = -g;
+    if (ng >= yMin && ng <= yMax) {
+      const y = yOf(ng);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
-    ctx.stroke();
-  });
+  }
+
+  ctx.restore();
+}
 
   dom.liveAxis.innerHTML =
     ['-10s','-8s','-6s','-4s','-2s','0s'].map(t => `<span>${t}</span>`).join('');
@@ -291,20 +358,29 @@ function drawResult(data) {
   ctx.fillStyle = '#0b0b0c';
   ctx.fillRect(0, 0, W, H);
 
+  const unitMode = data.unit || activeUnit; // wichtig: gespeicherte Einheit nutzen
+
   let mn = Infinity, mx = -Infinity;
   ['x','y','z','t'].forEach(s => {
     data[s].forEach(v => { if (v < mn) mn = v; if (v > mx) mx = v; });
   });
-  const rng = (mx - mn) || 1;
-  const yMin = mn - rng*0.12, yMax = mx + rng*0.12;
+  if (!isFinite(mn)) { mn = -1; mx = 1; }
+  const rng  = (mx - mn) || 1;
+  const yMin = mn - rng * 0.12;
+  const yMax = mx + rng * 0.12;
 
+  // DIN-Grenzen (dezent) nur bei vel
+  drawDinGuides(ctx, W, H, yMin, yMax, unitMode);
+
+  // Null-Linie
   const y0 = H - ((0 - yMin) / (yMax - yMin)) * H;
-  ctx.strokeStyle = '#2a2a2d'; ctx.lineWidth = 1;
+  ctx.strokeStyle = '#2a2a2d';
+  ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
 
   ['x','y','z','t'].forEach(s => {
     ctx.strokeStyle = COLORS[s];
-    ctx.lineWidth   = s === 't' ? 2.5 : 1.5;
+    ctx.lineWidth   = (s === 't') ? 2.5 : 1.5;
     ctx.beginPath();
     data[s].forEach((v, i) => {
       const xp = (i / (data[s].length - 1)) * W;
@@ -313,6 +389,12 @@ function drawResult(data) {
     });
     ctx.stroke();
   });
+
+  // Achsen-Labels im Canvas
+  drawAxisLabels(ctx, W, H, unitMode);
+
+  dom.resAxis.innerHTML = '<span>Anfang</span><span>Ende</span>';
+}
 
   dom.resAxis.innerHTML = '<span>Anfang</span><span>Ende</span>';
 }
