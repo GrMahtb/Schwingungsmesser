@@ -6,7 +6,6 @@
   --accent:#ffed00;
   --text:#f2f2f2;
   --muted:#8a8a92;
-
   --r:16px;
 }
 
@@ -21,39 +20,55 @@ body{
   margin:0 auto;
 }
 
-/* Header */
+/* ══════════════════════════════
+   HEADER / BRAND
+══════════════════════════════ */
 .brand{
-  background: linear-gradient(180deg,#171718,#141416);
   border:1px solid var(--border);
-  border-radius:var(--r);
-  padding:18px 16px 14px;
+  border-radius:0;
   margin-bottom:12px;
-  text-align:center;
+  background:transparent;
+  overflow:hidden;
 }
+
+/* Logo-Block: gelb, kein Padding, kein Rand, füllt alles */
 .brand__logo{
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  margin-bottom:10px;
+  margin:0;
+  padding:0;
+  background:#ffed00;
+  line-height:0;   /* entfernt unerwünschten Whitespace unter SVG */
 }
+
 .brand__logo svg{
-  width:min(560px, 96%);
+  width:100%;
   height:auto;
   display:block;
 }
+
+/* Textbereich unter dem Logo */
+.brand__body{
+  background:linear-gradient(180deg,#171718,#141416);
+  padding:14px 16px 12px;
+  border-top:1px solid var(--border);
+  text-align:center;
+}
+
 .brand__title{
   font-weight:900;
   color:var(--accent);
   font-size:1.25em;
   letter-spacing:.5px;
 }
+
 .brand__subtitle{
   margin-top:6px;
   font-size:.8em;
   color:var(--muted);
 }
 
-/* Install banner */
+/* ══════════════════════════════
+   INSTALL BANNER
+══════════════════════════════ */
 .installBanner{
   display:flex;
   align-items:center;
@@ -72,7 +87,9 @@ body{
   font-size:.82em;
 }
 
-/* Status */
+/* ══════════════════════════════
+   STATUS BAR
+══════════════════════════════ */
 .statusBar{
   border:1px solid var(--border);
   border-radius:12px;
@@ -102,7 +119,9 @@ body{
   font-weight:900;
 }
 
-/* Tabs */
+/* ══════════════════════════════
+   TABS
+══════════════════════════════ */
 .tabs{
   display:flex;
   gap:4px;
@@ -116,22 +135,28 @@ body{
   flex:1;
   border:none;
   background:transparent;
-  color:var(--muted);
+  color:var(--text);
   padding:10px 6px;
   border-radius:10px;
   font-weight:900;
   cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
 }
 .tab.is-active{
   background:var(--accent);
   color:#111;
 }
 
-/* Panes */
+/* ══════════════════════════════
+   PANES
+══════════════════════════════ */
 .pane{ display:none; }
 .pane.is-active{ display:block; }
 
-/* Cards */
+/* ══════════════════════════════
+   CARDS
+══════════════════════════════ */
 .card{
   background:var(--card);
   border:1px solid var(--border);
@@ -159,7 +184,9 @@ body{
   display:inline-block;
 }
 
-/* Main value */
+/* ══════════════════════════════
+   HAUPT-ANZEIGE
+══════════════════════════════ */
 .mainValue{
   text-align:center;
   margin:6px 0 10px;
@@ -168,7 +195,7 @@ body{
   font-size:3.4em;
   font-weight:950;
   color:var(--accent);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric:tabular-nums;
   line-height:1;
 }
 #mainSub{
@@ -177,7 +204,9 @@ body{
   color:var(--muted);
 }
 
-/* Unit switch */
+/* ══════════════════════════════
+   EINHEIT SWITCH
+══════════════════════════════ */
 .unitSwitch{
   display:flex;
   justify-content:center;
@@ -188,11 +217,13 @@ body{
 .unitBtn{
   border:1px solid var(--border);
   background:var(--card2);
-  color:var(--muted);
+  color:var(--text);
   padding:7px 12px;
   border-radius:999px;
   font-weight:950;
   cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
 }
 .unitBtn.is-active{
   background:var(--accent);
@@ -200,15 +231,17 @@ body{
   color:#111;
 }
 
-/* Grid tiles */
+/* ══════════════════════════════
+   GRID / TILES
+══════════════════════════════ */
 .grid{
   display:grid;
-  grid-template-columns:repeat(4, 1fr);
+  grid-template-columns:repeat(4,1fr);
   gap:8px;
   margin-top:12px;
 }
-@media (max-width:720px){
-  .grid{ grid-template-columns:repeat(2, 1fr); }
+@media(max-width:720px){
+  .grid{ grid-template-columns:repeat(2,1fr); }
 }
 
 .tile{
@@ -217,11 +250,16 @@ body{
   border-radius:12px;
   padding:10px 8px;
   text-align:center;
+  color:var(--text);         /* ← Werte-Farbe: weiß */
 }
 button.tile{
   width:100%;
   cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
+  color:var(--text);         /* ← Button-Reset: weiß */
 }
+
 .tile__label{
   font-size:.62em;
   color:var(--muted);
@@ -233,18 +271,21 @@ button.tile{
   font-size:1.22em;
   margin:3px 0 1px;
   font-weight:950;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric:tabular-nums;
+  color:var(--text);         /* ← explizit weiß */
 }
 .tile__unit{
   font-size:.55em;
-  color:#444;
+  color:var(--muted);
 }
 
-/* Toggle-off style */
+/* Toggle-off */
 .is-off{ opacity:.30; filter:grayscale(80%); }
-.legendBtn.is-off{ text-decoration: line-through; }
+.legendBtn.is-off{ text-decoration:line-through; }
 
-/* Canvas */
+/* ══════════════════════════════
+   CANVAS
+══════════════════════════════ */
 canvas{
   width:100%;
   display:block;
@@ -253,17 +294,21 @@ canvas{
   border-radius:12px;
 }
 
-/* Axis labels */
+/* ══════════════════════════════
+   ACHSEN-LABELS
+══════════════════════════════ */
 .axis{
   display:flex;
   justify-content:space-between;
   font-size:.62em;
-  color:#444;
+  color:var(--muted);
   padding:3px 4px;
   margin-top:5px;
 }
 
-/* Legend */
+/* ══════════════════════════════
+   LEGENDE
+══════════════════════════════ */
 .legend{
   display:flex;
   gap:10px;
@@ -274,14 +319,18 @@ canvas{
 .legendBtn{
   border:1px solid var(--border);
   background:transparent;
-  color:var(--muted);
+  color:var(--text);
   padding:6px 10px;
   border-radius:999px;
   font-weight:950;
   cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
 }
 
-/* Buttons */
+/* ══════════════════════════════
+   BUTTONS
+══════════════════════════════ */
 .buttons{
   display:flex;
   gap:10px;
@@ -294,20 +343,29 @@ canvas{
   padding:12px 18px;
   font-weight:950;
   cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
 }
 .btn:active{ transform:scale(.98); opacity:.9; }
 
 .btn--accent{ background:var(--accent); color:#111; }
-.btn--ghost{ background:var(--card2); border:1px solid var(--border); color:var(--muted); }
-.btn--warn{ background:#cc8800; color:#111; font-weight:950; }
-.btn--ok{ background:#152818; border:1px solid #1f3b25; color:#00cc66; }
-.btn--stop{ background:#cc0000; color:#ffffff; }
+.btn--stop{   background:#cc0000;       color:#fff; }
+.btn--ghost{  background:var(--card2);
+              border:1px solid var(--border);
+              color:var(--text); }
+.btn--warn{   background:#cc8800;       color:#111; }
+.btn--ok{     background:#152818;
+              border:1px solid #1f3b25;
+              color:#00cc66; }
 
-/* DIN table */
+/* ══════════════════════════════
+   DIN 4150-2 TABELLE
+══════════════════════════════ */
 .din{
   width:100%;
   border-collapse:collapse;
   font-size:.78em;
+  color:var(--text);
 }
 .din td{
   padding:8px 6px;
@@ -316,6 +374,8 @@ canvas{
 .din tr:last-child td{ border-bottom:none; }
 .din tr.is-active td{
   background:rgba(255,237,0,.08);
+  color:var(--accent);
+  font-weight:900;
 }
 .note{
   color:#cc8800;
@@ -323,7 +383,9 @@ canvas{
   margin-bottom:10px;
 }
 
-/* Debug details */
+/* ══════════════════════════════
+   DEBUG
+══════════════════════════════ */
 .debug{
   border:1px solid var(--border);
   border-radius:12px;
@@ -346,14 +408,16 @@ canvas{
   border:1px solid var(--border);
   border-radius:10px;
   padding:10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
   font-size:.7em;
   color:#6c6c74;
   white-space:pre-wrap;
   line-height:1.5;
 }
 
-/* Results */
+/* ══════════════════════════════
+   ERGEBNISSE
+══════════════════════════════ */
 .results__head{
   text-align:center;
   margin:18px 0 10px;
@@ -375,7 +439,9 @@ canvas{
   text-align:center;
 }
 
-/* Text blocks */
+/* ══════════════════════════════
+   TEXT BLÖCKE
+══════════════════════════════ */
 .text{
   color:var(--muted);
   font-size:.84em;
@@ -384,6 +450,9 @@ canvas{
 .text b{ color:var(--accent); }
 .text .hint{ text-align:left; margin-top:10px; }
 
+/* ══════════════════════════════
+   FOOTER
+══════════════════════════════ */
 .footer{
   text-align:center;
   color:#333;

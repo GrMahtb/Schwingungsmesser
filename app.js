@@ -1,41 +1,44 @@
 'use strict';
 
-/* ══════════════════════════════════════════════
-   FEHLER-ANZEIGE (sofort sichtbar bei JS-Crash)
-══════════════════════════════════════════════ */
-window.addEventListener('error', e => {
+/* ─────────────────────────────────────────────
+   Global Error -> sichtbar im StatusBar
+───────────────────────────────────────────── */
+window.addEventListener('error', (e) => {
   const sb = document.getElementById('statusBar');
-  if (sb) {
-    sb.hidden = false;
-    sb.textContent = 'JS Fehler: ' + e.message + ' (Zeile ' + e.lineno + ')';
-    sb.className = 'statusBar is-error';
-  }
+  if (!sb) return;
+  sb.hidden = false;
+  sb.textContent = `JS Fehler: ${e.message} (Zeile ${e.lineno})`;
+  sb.className = 'statusBar is-error';
 });
 
-/* ══════════════════════════════════════════════
-   KONSTANTEN
-══════════════════════════════════════════════ */
-const WINDOW_LEN = 600;
+/* ─────────────────────────────────────────────
+   Konfiguration
+───────────────────────────────────────────── */
+const WINDOW_LEN = 600;              // 10 s * ~60 Hz
+const MAX_REC    = 36000;            // max. Recording-Punkte
 const COLORS     = { x:'#ff4444', y:'#00cc66', z:'#4499ff', t:'#ffed00' };
-const EVT_THR    = 0.1;
-const MAX_REC    = 36000;
-const HP_ALPHA   = 0.97;
-const LEAK_V     = 0.985;
-const LEAK_P     = 0.995;
 
-/* ══════════════════════════════════════════════
-   GLOBALE VARIABLEN
-══════════════════════════════════════════════ */
-let running           = false;
-let startTime         = null;
-let durTimer          = null;
-let rafId             = null;
-let savedData         = null;
-let deferredPrompt    = null;
-let activeUnit        = 'vel';
-let rec               = null;
-let noDataTimer       = null;
-let motionEventCount  = 0;
+const HP_ALPHA   = 0.97;             // High-pass
+const LEAK_V     = 0.985;            // Drift-Reduktion v
+const LEAK_P     = 0.995;            // Drift-Reduktion s
+const EVT_THR    = 0.1;              // mm/s (Event-Schwelle)
+
+/* ─────────────────────────────────────────────
+   Zustand
+───────────────────────────────────────────── */
+let running = false;
+let startTime = null;
+let durTimer = null;
+let rafId = null;
+
+let savedData = null;
+let rec = null;
+
+let deferredPrompt = null;
+
+let activeUnit = 'vel';              // 'vel'|'acc'|'disp'
+let noDataTimer = null;
+let motionEventCount = 0;
 
 let rawX = 0, rawY = 0, rawZ = 0;
 
@@ -44,23 +47,66 @@ const buf = {
   y: new Float32Array(WINDOW_LEN),
   z: new Float32Array(WINDOW_LEN),
   t: new Float32Array(WINDOW_LEN),
-  ptr: 0, len: 0,
+  ptr: 0,
+  len: 0
 };
 
 const intg = { vx:0, vy:0, vz:0, px:0, py:0, pz:0, prev:null };
 const hp   = { x:0, y:0, z:0, px:0, py:0, pz:0 };
 
-let peakTotal = 0, rmsAcc = 0, rmsCnt = 0, evtCount = 0;
+let peakTotal = 0;
+let rmsAcc = 0;
+let rmsCnt = 0;
+let evtCount = 0;
 
 const vis = { x:true, y:true, z:true, t:true };
 
-/* ══════════════════════════════════════════════
-   HELPER
-══════════════════════════════════════════════ */
-function unitLabel() {
-  if (activeUnit === 'acc')  return 'm/s²';
-  if (activeUnit === 'disp') return 'mm';
-  return 'mm/s';
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+
+const dom = {
+  statusBar:     $('statusBar'),
+  mainNum:       $('mainNum'),
+  mainSub:       $('mainSub'),
+
+  xVal:          $('xVal'),
+  yVal:          $('yVal'),
+  zVal:          $('zVal'),
+  tVal:          $('tVal'),
+
+  peakVal:       $('peakVal'),
+  rmsVal:        $('rmsVal'),
+  evtVal:        $('evtVal'),
+  durVal:        $('durVal'),
+
+  debugPanel:    $('debugPanel'),
+
+  liveChart:     $('liveChart'),
+  liveAxis:      $('liveAxis'),
+
+  resultChart:   $('resultChart'),
+  resAxis:       $('resAxis'),
+  resMeta:       $('resMeta'),
+
+  dinNote:       $('dinNote'),
+  results:       $('results'),
+
+  startBtn:      $('startBtn'),
+  resetBtn:      $('resetBtn'),
+
+  iosPermBtn:    $('iosPermBtn'),
+
+  installBanner: $('installBanner'),
+  installBtn:    $('installBtn')
+};
+
+const liveCtx = dom.liveChart.getContext('2d');
+const resCtx  = dom.resultChart.getContext('2d');
+
+function unitLabel(){
+  return activeUnit === 'acc' ? 'm/s²' : activeUnit === 'disp' ? 'mm' : 'mm/s';
 }
 
 function fmtTime(ms) {
@@ -69,55 +115,17 @@ function fmtTime(ms) {
   return `${mm}:${ss}`;
 }
 
-/* ══════════════════════════════════════════════
-   DOM REFERENZEN
-══════════════════════════════════════════════ */
-const $ = id => document.getElementById(id);
-
-const dom = {
-  statusBar:     $('statusBar'),
-  mainNum:       $('mainNum'),
-  mainSub:       $('mainSub'),
-  xVal:          $('xVal'),
-  yVal:          $('yVal'),
-  zVal:          $('zVal'),
-  tVal:          $('tVal'),
-  peakVal:       $('peakVal'),
-  rmsVal:        $('rmsVal'),
-  evtVal:        $('evtVal'),
-  durVal:        $('durVal'),
-  debugPanel:    $('debugPanel'),
-  liveChart:     $('liveChart'),
-  liveAxis:      $('liveAxis'),
-  resultChart:   $('resultChart'),
-  resAxis:       $('resAxis'),
-  resMeta:       $('resMeta'),
-  dinNote:       $('dinNote'),
-  results:       $('results'),
-  startBtn:      $('startBtn'),
-  resetBtn:      $('resetBtn'),
-  iosPermBtn:    $('iosPermBtn'),
-  installBanner: $('installBanner'),
-  installBtn:    $('installBtn'),
-};
-
-const liveCtx = dom.liveChart.getContext('2d');
-const resCtx  = dom.resultChart.getContext('2d');
-
-/* ══════════════════════════════════════════════
-   STATUS BAR
-══════════════════════════════════════════════ */
 function setStatus(msg, cls) {
   dom.statusBar.textContent = msg;
-  dom.statusBar.className   = 'statusBar' + (cls ? ' ' + cls : '');
-  dom.statusBar.hidden      = !msg;
+  dom.statusBar.className = 'statusBar' + (cls ? ' ' + cls : '');
+  dom.statusBar.hidden = !msg;
 }
 
-/* ══════════════════════════════════════════════
-   CANVAS RESIZE
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Canvas scaling (sauber, ohne Scale-Akkumulation)
+───────────────────────────────────────────── */
 function resizeCanvas(cvs) {
-  const dpr  = window.devicePixelRatio || 1;
+  const dpr = window.devicePixelRatio || 1;
   const rect = cvs.getBoundingClientRect();
   if (!rect.width) return;
   cvs.width  = Math.floor(rect.width  * dpr);
@@ -133,26 +141,31 @@ function initCanvases() {
 }
 
 window.addEventListener('resize', initCanvases);
-requestAnimationFrame(() => setTimeout(initCanvases, 150));
+requestAnimationFrame(() => setTimeout(initCanvases, 120));
 
-/* ══════════════════════════════════════════════
-   TABS
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Tabs
+───────────────────────────────────────────── */
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(b =>
-      b.classList.toggle('is-active', b === btn));
+      b.classList.toggle('is-active', b === btn)
+    );
+
     document.querySelectorAll('.pane').forEach(p => {
-      const on = p.id === `tab-${btn.dataset.tab}`;
+      const on = (p.id === `tab-${btn.dataset.tab}`);
       p.classList.toggle('is-active', on);
       p.hidden = !on;
     });
+
+    // nach Tabwechsel einmal Canvas neu berechnen (Layout kann sich ändern)
+    setTimeout(initCanvases, 60);
   });
 });
 
-/* ══════════════════════════════════════════════
-   EINHEIT SWITCH
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Unit Switch
+───────────────────────────────────────────── */
 function updateUnitLabels() {
   const u = unitLabel();
   ['unitX','unitY','unitZ','unitT','unitPeak','unitRms'].forEach(id => {
@@ -166,29 +179,35 @@ document.querySelectorAll('.unitBtn').forEach(btn => {
   btn.addEventListener('click', () => {
     activeUnit = btn.dataset.unit;
     document.querySelectorAll('.unitBtn').forEach(b =>
-      b.classList.toggle('is-active', b === btn));
+      b.classList.toggle('is-active', b === btn)
+    );
     updateUnitLabels();
   });
 });
 
-/* ══════════════════════════════════════════════
-   ACHSEN TOGGLE
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Axis toggles
+───────────────────────────────────────────── */
 function applyToggle(s, on) {
   vis[s] = on;
-  document.querySelectorAll(`[data-series="${s}"]`).forEach(el =>
-    el.classList.toggle('is-off', !on));
+  document.querySelectorAll(`[data-series="${s}"]`).forEach(el => {
+    el.classList.toggle('is-off', !on);
+  });
+
+  // DIN-Hinweis (nur Hinweistext – DIN selbst basiert weiter auf Total-vel)
   dom.dinNote.hidden = vis.t;
 }
 
 document.querySelectorAll('.tile[data-series], .legendBtn[data-series]').forEach(btn => {
-  btn.addEventListener('click', () =>
-    applyToggle(btn.dataset.series, !vis[btn.dataset.series]));
+  btn.addEventListener('click', () => {
+    const s = btn.dataset.series;
+    applyToggle(s, !vis[s]);
+  });
 });
 
-/* ══════════════════════════════════════════════
-   DIN 4150-2
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   DIN 4150-2 (nur Velocity Total sinnvoll)
+───────────────────────────────────────────── */
 const dinRows   = ['n0','n1','n2','n3','n4'];
 const dinBounds = [0, 0.3, 1.0, 3.0, 10.0];
 
@@ -197,47 +216,51 @@ function updateDIN(vMms) {
   for (let i = dinBounds.length - 1; i >= 0; i--) {
     if (vMms >= dinBounds[i]) { row = i; break; }
   }
-  dinRows.forEach((id, i) =>
-    $(id).classList.toggle('is-active', i === row));
+  dinRows.forEach((id, i) => $(id).classList.toggle('is-active', i === row));
 }
 
-/* ══════════════════════════════════════════════
-   HIGH-PASS + INTEGRATION
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   High-pass + Integration
+───────────────────────────────────────────── */
 function processIMU(ax, ay, az, dt) {
+  // High-pass
   hp.x = HP_ALPHA * (hp.x + ax - hp.px);
   hp.y = HP_ALPHA * (hp.y + ay - hp.py);
   hp.z = HP_ALPHA * (hp.z + az - hp.pz);
   hp.px = ax; hp.py = ay; hp.pz = az;
 
+  // velocity (m/s)
   intg.vx = (intg.vx + hp.x * dt) * LEAK_V;
   intg.vy = (intg.vy + hp.y * dt) * LEAK_V;
   intg.vz = (intg.vz + hp.z * dt) * LEAK_V;
 
+  // displacement (m)
   intg.px = (intg.px + intg.vx * dt) * LEAK_P;
   intg.py = (intg.py + intg.vy * dt) * LEAK_P;
   intg.pz = (intg.pz + intg.vz * dt) * LEAK_P;
 }
 
-/* ══════════════════════════════════════════════
-   WERTE JE EINHEIT
-══════════════════════════════════════════════ */
 function getValues() {
+  // Rückgabe in UI-Einheiten:
+  // acc: m/s² (HP)
+  // vel: mm/s
+  // disp: mm
   if (activeUnit === 'acc') {
     const vx = hp.x, vy = hp.y, vz = hp.z;
     return { vx, vy, vz, vt: Math.sqrt(vx*vx + vy*vy + vz*vz) };
   }
   if (activeUnit === 'disp') {
-    const vx = intg.px*1000, vy = intg.py*1000, vz = intg.pz*1000;
+    const vx = intg.px * 1000, vy = intg.py * 1000, vz = intg.pz * 1000;
     return { vx, vy, vz, vt: Math.sqrt(vx*vx + vy*vy + vz*vz) };
   }
-  const vx = intg.vx*1000, vy = intg.vy*1000, vz = intg.vz*1000;
+  // vel
+  const vx = intg.vx * 1000, vy = intg.vy * 1000, vz = intg.vz * 1000;
   return { vx, vy, vz, vt: Math.sqrt(vx*vx + vy*vy + vz*vz) };
 }
 
-/* ══════════════════════════════════════════════
-   LIVE CHART
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Charts (Live + Result)
+───────────────────────────────────────────── */
 function drawLive() {
   const cvs = dom.liveChart;
   const ctx = liveCtx;
@@ -264,15 +287,17 @@ function drawLive() {
   const yMin = mn - rng * 0.12;
   const yMax = mx + rng * 0.12;
 
+  // Null-Linie
   const y0 = H - ((0 - yMin) / (yMax - yMin)) * H;
   ctx.strokeStyle = '#2a2a2d';
-  ctx.lineWidth   = 1;
+  ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
 
+  // Serien
   ['x','y','z','t'].forEach(s => {
     if (!vis[s]) return;
     ctx.strokeStyle = COLORS[s];
-    ctx.lineWidth   = s === 't' ? 2.5 : 1.5;
+    ctx.lineWidth = (s === 't') ? 2.5 : 1.5;
     ctx.beginPath();
     for (let i = 0; i < buf.len; i++) {
       const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
@@ -284,13 +309,9 @@ function drawLive() {
   });
 
   dom.liveAxis.innerHTML =
-    ['-10s','-8s','-6s','-4s','-2s','0s']
-      .map(t => `<span>${t}</span>`).join('');
+    ['-10s','-8s','-6s','-4s','-2s','0s'].map(t => `<span>${t}</span>`).join('');
 }
 
-/* ══════════════════════════════════════════════
-   ERGEBNIS CHART
-══════════════════════════════════════════════ */
 function drawResult(data) {
   const cvs = dom.resultChart;
   const ctx = resCtx;
@@ -311,12 +332,12 @@ function drawResult(data) {
 
   const y0 = H - ((0 - yMin) / (yMax - yMin)) * H;
   ctx.strokeStyle = '#2a2a2d';
-  ctx.lineWidth   = 1;
+  ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
 
   ['x','y','z','t'].forEach(s => {
     ctx.strokeStyle = COLORS[s];
-    ctx.lineWidth   = s === 't' ? 2.5 : 1.5;
+    ctx.lineWidth   = (s === 't') ? 2.5 : 1.5;
     ctx.beginPath();
     data[s].forEach((v, i) => {
       const xp = (i / (data[s].length - 1)) * W;
@@ -328,9 +349,10 @@ function drawResult(data) {
 
   dom.resAxis.innerHTML = '<span>Anfang</span><span>Ende</span>';
 }
-/* ══════════════════════════════════════════════
-   SENSOR EVENT
-══════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────
+   Sensor
+───────────────────────────────────────────── */
 function onMotion(e) {
   motionEventCount++;
 
@@ -342,27 +364,27 @@ function onMotion(e) {
   ) ? e.acceleration : e.accelerationIncludingGravity;
 
   if (!a) return;
+
   rawX = Number(a.x) || 0;
   rawY = Number(a.y) || 0;
   rawZ = Number(a.z) || 0;
 }
-window.addEventListener('devicemotion', onMotion, { passive: true });
+window.addEventListener('devicemotion', onMotion, { passive:true });
 
-/* ══════════════════════════════════════════════
-   RESET
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Reset / Start / Stop
+───────────────────────────────────────────── */
 function resetState() {
   running = false;
 
-  if (rafId)     { cancelAnimationFrame(rafId); rafId = null; }
-  if (durTimer)  { clearInterval(durTimer);     durTimer = null; }
-  if (noDataTimer){ clearTimeout(noDataTimer);  noDataTimer = null; }
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (durTimer) { clearInterval(durTimer); durTimer = null; }
+  if (noDataTimer) { clearTimeout(noDataTimer); noDataTimer = null; }
 
-  startTime        = null;
-  evtCount         = 0;
-  peakTotal        = 0;
-  rmsAcc           = 0;
-  rmsCnt           = 0;
+  startTime = null;
+  evtCount = 0;
+  peakTotal = 0;
+  rmsAcc = 0; rmsCnt = 0;
   motionEventCount = 0;
 
   buf.ptr = 0; buf.len = 0;
@@ -376,6 +398,7 @@ function resetState() {
   hp.px = hp.py = hp.pz = 0;
 
   rawX = rawY = rawZ = 0;
+
   rec = null;
   savedData = null;
 
@@ -383,18 +406,22 @@ function resetState() {
   dom.startBtn.classList.add('btn--accent');
   dom.startBtn.classList.remove('btn--stop');
 
-  dom.mainNum.textContent  = '0.00';
-  dom.mainSub.textContent  = `${unitLabel()} (Total)`;
-  dom.xVal.textContent     = '0.00';
-  dom.yVal.textContent     = '0.00';
-  dom.zVal.textContent     = '0.00';
-  dom.tVal.textContent     = '0.00';
-  dom.peakVal.textContent  = '0.00';
-  dom.rmsVal.textContent   = '0.00';
-  dom.evtVal.textContent   = '0';
-  dom.durVal.textContent   = '00:00';
-  dom.results.hidden       = true;
-  dom.resMeta.textContent  = '—';
+  dom.mainNum.textContent = '0.00';
+  dom.mainSub.textContent = `${unitLabel()} (Total)`;
+
+  dom.xVal.textContent = '0.00';
+  dom.yVal.textContent = '0.00';
+  dom.zVal.textContent = '0.00';
+  dom.tVal.textContent = '0.00';
+
+  dom.peakVal.textContent = '0.00';
+  dom.rmsVal.textContent  = '0.00';
+  dom.evtVal.textContent  = '0';
+  dom.durVal.textContent  = '00:00';
+
+  dom.results.hidden = true;
+  dom.resMeta.textContent = '—';
+
   dom.debugPanel.textContent = 'Warte auf Sensor-Daten …';
 
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
@@ -404,23 +431,19 @@ function resetState() {
   drawLive();
 }
 
-/* ══════════════════════════════════════════════
-   START
-══════════════════════════════════════════════ */
 function startMeasurement() {
   if (running) return;
 
   resetState();
-
-  running          = true;
-  startTime        = Date.now();
+  running = true;
+  startTime = Date.now();
   motionEventCount = 0;
 
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = true);
 
   rec = {
-    unit:    activeUnit,
-    t0:      performance.now(),
+    unit: activeUnit,
+    t0: performance.now(),
     startTs: startTime,
     x: [], y: [], z: [], t: [],
     velTotal: []
@@ -436,27 +459,22 @@ function startMeasurement() {
     dom.durVal.textContent = fmtTime(Date.now() - startTime);
   }, 250);
 
-  // Kein Sensor nach 2 Sek → Fehlermeldung
   noDataTimer = setTimeout(() => {
     if (motionEventCount === 0) {
-      setStatus('Kein Sensor! Prüfe Browser-Berechtigungen.', 'is-error');
+      setStatus('Kein Sensor! Prüfe Berechtigungen / Browser.', 'is-error');
     }
   }, 2000);
 
   rafId = requestAnimationFrame(loop);
 }
 
-/* ══════════════════════════════════════════════
-   STOP
-══════════════════════════════════════════════ */
 function stopMeasurement() {
   if (!running) return;
-
   running = false;
 
-  if (rafId)    { cancelAnimationFrame(rafId); rafId = null; }
-  if (durTimer) { clearInterval(durTimer);     durTimer = null; }
-  if (noDataTimer){ clearTimeout(noDataTimer); noDataTimer = null; }
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (durTimer) { clearInterval(durTimer); durTimer = null; }
+  if (noDataTimer) { clearTimeout(noDataTimer); noDataTimer = null; }
 
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
 
@@ -468,8 +486,8 @@ function stopMeasurement() {
 
   if (rec && rec.t.length > 5) {
     savedData = {
-      unit:        rec.unit,
-      startTs:     rec.startTs,
+      unit: rec.unit,
+      startTs: rec.startTs,
       durationSec: (performance.now() - rec.t0) / 1000,
       x: rec.x.slice(),
       y: rec.y.slice(),
@@ -477,7 +495,7 @@ function stopMeasurement() {
       t: rec.t.slice()
     };
 
-    dom.results.hidden      = false;
+    dom.results.hidden = false;
     dom.resMeta.textContent =
       `${new Date(savedData.startTs).toLocaleString('de-DE')} · ` +
       `Dauer: ${savedData.durationSec.toFixed(1)} s · ` +
@@ -486,22 +504,18 @@ function stopMeasurement() {
     setTimeout(() => {
       resizeCanvas(dom.resultChart);
       drawResult(savedData);
-    }, 100);
+    }, 80);
   }
 
   rec = null;
 }
 
-/* Button Events */
-dom.startBtn.addEventListener('click', () => {
-  if (running) stopMeasurement();
-  else         startMeasurement();
-});
+dom.startBtn.addEventListener('click', () => running ? stopMeasurement() : startMeasurement());
 dom.resetBtn.addEventListener('click', () => resetState());
 
-/* ══════════════════════════════════════════════
-   HAUPT-LOOP (RAF)
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Loop
+───────────────────────────────────────────── */
 function loop() {
   if (!running) return;
   rafId = requestAnimationFrame(loop);
@@ -515,7 +529,7 @@ function loop() {
   const { vx, vy, vz, vt } = getValues();
   const u = unitLabel();
 
-  // Ringbuffer
+  // ringbuffer
   buf.x[buf.ptr] = vx;
   buf.y[buf.ptr] = vy;
   buf.z[buf.ptr] = vz;
@@ -523,26 +537,24 @@ function loop() {
   buf.ptr = (buf.ptr + 1) % WINDOW_LEN;
   if (buf.len < WINDOW_LEN) buf.len++;
 
-  // Statistik (immer mm/s Velocity-Total)
-  const velTotal = Math.sqrt(
-    intg.vx*intg.vx + intg.vy*intg.vy + intg.vz*intg.vz
-  ) * 1000;
-
+  // Statistik immer Velocity-Total (mm/s)
+  const velTotal = Math.sqrt(intg.vx*intg.vx + intg.vy*intg.vy + intg.vz*intg.vz) * 1000;
   if (velTotal > peakTotal) peakTotal = velTotal;
   rmsAcc += velTotal * velTotal;
   rmsCnt++;
   if (velTotal > EVT_THR) evtCount++;
 
-  // Tiles
-  dom.xVal.textContent    = vx.toFixed(2);
-  dom.yVal.textContent    = vy.toFixed(2);
-  dom.zVal.textContent    = vz.toFixed(2);
-  dom.tVal.textContent    = vt.toFixed(2);
+  // UI
+  dom.xVal.textContent = vx.toFixed(2);
+  dom.yVal.textContent = vy.toFixed(2);
+  dom.zVal.textContent = vz.toFixed(2);
+  dom.tVal.textContent = vt.toFixed(2);
+
   dom.peakVal.textContent = peakTotal.toFixed(2);
   dom.rmsVal.textContent  = rmsCnt ? Math.sqrt(rmsAcc / rmsCnt).toFixed(2) : '0.00';
   dom.evtVal.textContent  = evtCount;
 
-  // Hauptanzeige (Total aus → größte sichtbare Achse)
+  // Main: Total aus -> max sichtbare Achse
   let main = vt;
   let sub  = `${u} (Total)`;
   if (!vis.t) {
@@ -551,29 +563,27 @@ function loop() {
     if (vis.y) cand.push({ k:'Y', v:Math.abs(vy) });
     if (vis.z) cand.push({ k:'Z', v:Math.abs(vz) });
     if (cand.length) {
-      cand.sort((a, b) => b.v - a.v);
+      cand.sort((a,b) => b.v - a.v);
       main = cand[0].v;
-      sub  = `${u} (${cand[0].k})`;
+      sub = `${u} (${cand[0].k})`;
     } else {
-      main = 0;
-      sub  = `${u} (–)`;
+      main = 0; sub = `${u} (–)`;
     }
   }
   dom.mainNum.textContent = main.toFixed(2);
   dom.mainSub.textContent = sub;
 
-  // DIN
   if (activeUnit === 'vel') updateDIN(velTotal);
+
+  drawLive();
 
   // Debug
   dom.debugPanel.textContent =
-    `raw  ax=${rawX.toFixed(3)}  ay=${rawY.toFixed(3)}  az=${rawZ.toFixed(3)} m/s²\n` +
-    `hp   ax=${hp.x.toFixed(3)}  ay=${hp.y.toFixed(3)}  az=${hp.z.toFixed(3)} m/s²\n` +
-    `vel  x=${(intg.vx*1000).toFixed(2)}  y=${(intg.vy*1000).toFixed(2)}  z=${(intg.vz*1000).toFixed(2)} mm/s\n` +
-    `velTotal=${velTotal.toFixed(2)} mm/s  Peak=${peakTotal.toFixed(2)} mm/s\n` +
-    `Events=${evtCount}  dt=${(dt*1000).toFixed(1)} ms  unit=${activeUnit}`;
-
-  drawLive();
+    `raw ax=${rawX.toFixed(3)} ay=${rawY.toFixed(3)} az=${rawZ.toFixed(3)} m/s²\n` +
+    `hp  ax=${hp.x.toFixed(3)} ay=${hp.y.toFixed(3)} az=${hp.z.toFixed(3)} m/s²\n` +
+    `vel x=${(intg.vx*1000).toFixed(2)} y=${(intg.vy*1000).toFixed(2)} z=${(intg.vz*1000).toFixed(2)} mm/s\n` +
+    `velTotal=${velTotal.toFixed(2)} mm/s | Peak=${peakTotal.toFixed(2)} mm/s\n` +
+    `Events=${evtCount} | dt=${(dt*1000).toFixed(1)} ms | unit=${activeUnit}`;
 
   // Recording
   if (rec && rec.t.length < MAX_REC) {
@@ -585,32 +595,29 @@ function loop() {
   }
 }
 
-/* ══════════════════════════════════════════════
-   EXPORT CSV
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Export: CSV
+───────────────────────────────────────────── */
 function exportCSV() {
   if (!savedData) return;
 
   const u = savedData.unit === 'vel' ? 'mm/s'
           : savedData.unit === 'acc' ? 'm/s²' : 'mm';
+
   const n  = savedData.t.length;
   const dt = savedData.durationSec / Math.max(1, n - 1);
 
   let csv = `# HTB Schwingungsmesser Export\n`;
-  csv    += `# Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}\n`;
-  csv    += `# Dauer: ${savedData.durationSec.toFixed(2)} s\n`;
-  csv    += `# Einheit: ${u}\n#\n`;
-  csv    += `i;time_s;x_${u};y_${u};z_${u};total_${u}\n`;
+  csv += `# Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}\n`;
+  csv += `# Dauer: ${savedData.durationSec.toFixed(2)} s\n`;
+  csv += `# Einheit: ${u}\n#\n`;
+  csv += `i;time_s;x_${u};y_${u};z_${u};total_${u}\n`;
 
   for (let i = 0; i < n; i++) {
-    csv += `${i};${(i*dt).toFixed(4)};` +
-           `${savedData.x[i].toFixed(6)};` +
-           `${savedData.y[i].toFixed(6)};` +
-           `${savedData.z[i].toFixed(6)};` +
-           `${savedData.t[i].toFixed(6)}\n`;
+    csv += `${i};${(i*dt).toFixed(4)};${savedData.x[i].toFixed(6)};${savedData.y[i].toFixed(6)};${savedData.z[i].toFixed(6)};${savedData.t[i].toFixed(6)}\n`;
   }
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
@@ -618,56 +625,159 @@ function exportCSV() {
   a.click();
   URL.revokeObjectURL(url);
 }
+$('csvBtn').addEventListener('click', exportCSV);
 
-/* ══════════════════════════════════════════════
-   EXPORT PDF (Druckdialog)
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   Export: PDF (wissenschaftlich, 3 Plots, weiß, 1 Seite)
+   -> als Print-HTML, dann "Als PDF speichern"
+───────────────────────────────────────────── */
+function plotToDataURL({ series, title, unit, color, durationSec }) {
+  const W = 1200, H = 260;
+  const mL = 70, mR = 18, mT = 28, mB = 46;
+  const pw = W - mL - mR;
+  const ph = H - mT - mB;
+
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  // white background
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0,0,W,H);
+
+  // grid
+  ctx.strokeStyle = '#e6e6e6';
+  ctx.lineWidth = 1;
+  for (let i=0;i<=10;i++){
+    const x = mL + (i/10)*pw;
+    ctx.beginPath(); ctx.moveTo(x, mT); ctx.lineTo(x, mT+ph); ctx.stroke();
+  }
+  for (let j=0;j<=6;j++){
+    const y = mT + (j/6)*ph;
+    ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL+pw, y); ctx.stroke();
+  }
+
+  // min/max
+  let mn = Infinity, mx = -Infinity;
+  for (const v of series){ if (v<mn) mn=v; if (v>mx) mx=v; }
+  if (!isFinite(mn) || !isFinite(mx)) { mn=-1; mx=1; }
+  if (mn === mx) { mn-=1; mx+=1; }
+  const pad = (mx-mn)*0.1;
+  mn -= pad; mx += pad;
+
+  const yOf = (v) => mT + ph - ((v - mn) / (mx - mn)) * ph;
+
+  // axes
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(mL, mT);
+  ctx.lineTo(mL, mT+ph);
+  ctx.lineTo(mL+pw, mT+ph);
+  ctx.stroke();
+
+  // title
+  ctx.fillStyle = '#111';
+  ctx.font = 'bold 14px Arial';
+  ctx.fillText(title, mL, 18);
+
+  // y label
+  ctx.fillStyle = '#333';
+  ctx.font = '12px Arial';
+  ctx.fillText(unit, 14, mT+12);
+
+  // y ticks
+  ctx.fillStyle = '#333';
+  ctx.font = '11px Arial';
+  for (let j=0;j<=6;j++){
+    const vv = mn + (j/6)*(mx-mn);
+    const y = yOf(vv);
+    ctx.fillText(vv.toFixed(2), 10, y+4);
+  }
+
+  // x ticks (time)
+  ctx.fillStyle = '#333';
+  ctx.font = '11px Arial';
+  for (let i=0;i<=5;i++){
+    const t = (durationSec*(i/5));
+    const x = mL + (i/5)*pw;
+    ctx.fillText(t.toFixed(1), x-8, H-18);
+  }
+  ctx.fillText('t [s]', mL+pw-30, H-4);
+
+  // line
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  const n = series.length;
+  for (let i=0;i<n;i++){
+    const x = mL + (i/(n-1))*pw;
+    const y = yOf(series[i]);
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  return c.toDataURL('image/png', 1.0);
+}
+
 function exportPDF() {
   if (!savedData) return;
 
-  resizeCanvas(dom.resultChart);
-  drawResult(savedData);
+  const unit =
+    savedData.unit === 'vel' ? 'mm/s' :
+    savedData.unit === 'acc' ? 'm/s²' : 'mm';
 
-  const img = dom.resultChart.toDataURL('image/png', 1.0);
-  const u   = savedData.unit === 'vel' ? 'mm/s'
-             : savedData.unit === 'acc' ? 'm/s²' : 'mm';
-  const w   = window.open('', '_blank');
+  const dur = savedData.durationSec;
+
+  const imgX = plotToDataURL({ series:savedData.x, title:'X-Achse', unit, color:'#ff4444', durationSec:dur });
+  const imgY = plotToDataURL({ series:savedData.y, title:'Y-Achse', unit, color:'#00cc66', durationSec:dur });
+  const imgZ = plotToDataURL({ series:savedData.z, title:'Z-Achse', unit, color:'#4499ff', durationSec:dur });
+
+  const w = window.open('', '_blank');
   if (!w) { setStatus('Popup blockiert – bitte erlauben!', 'is-error'); return; }
 
   w.document.open();
   w.document.write(`<!doctype html><html><head>
 <meta charset="utf-8"/>
-<title>HTB Schwingungsmesser</title>
+<title>HTB Schwingungsmesser – Diagramme</title>
 <style>
-  body{font-family:Arial,sans-serif;margin:24px;}
-  h1{font-size:16px;margin:0 0 8px;}
-  .meta{font-size:12px;color:#444;margin-bottom:12px;}
-  img{width:100%;max-width:1100px;border:1px solid #ddd;}
-</style></head><body>
-<h1>HTB Schwingungsmesser – Diagramm</h1>
-<div class="meta">
-  Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}<br/>
-  Dauer: ${savedData.durationSec.toFixed(1)} s &nbsp;·&nbsp;
-  Einheit: ${u} &nbsp;·&nbsp;
-  Punkte: ${savedData.t.length}
-</div>
-<img src="${img}" alt="Diagramm"/>
-<script>setTimeout(()=>window.print(),200);<\/script>
+  @page { size: A4 portrait; margin: 12mm; }
+  body{ font-family: Arial, sans-serif; background:#fff; color:#111; margin:0; }
+  .wrap{ padding: 12mm; }
+  h1{ font-size:16px; margin:0 0 6px; }
+  .meta{ font-size:11px; color:#333; line-height:1.45; margin-bottom:10px; }
+  .plot{ margin: 10px 0; page-break-inside: avoid; }
+  .plot img{ width:100%; border:1px solid #ddd; }
+  .hint{ font-size:11px; color:#666; margin-top:10px; }
+  @media print { .hint{ display:none; } }
+</style>
+</head><body>
+  <div class="wrap">
+    <h1>HTB Schwingungsmesser – wissenschaftliche Diagramme</h1>
+    <div class="meta">
+      Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}<br/>
+      Dauer: ${dur.toFixed(1)} s · Einheit: ${unit} · Punkte: ${savedData.t.length}<br/>
+      Hinweis: Smartphone-Sensoren sind nicht kalibriert.
+    </div>
+
+    <div class="plot"><img src="${imgX}" alt="X"></div>
+    <div class="plot"><img src="${imgY}" alt="Y"></div>
+    <div class="plot"><img src="${imgZ}" alt="Z"></div>
+
+    <div class="hint">Druckdialog öffnet sich gleich → „Als PDF speichern“ wählen.</div>
+  </div>
+
+<script>setTimeout(()=>window.print(),250);<\/script>
 </body></html>`);
   w.document.close();
 }
-
-$('csvBtn').addEventListener('click', exportCSV);
 $('pdfBtn').addEventListener('click', exportPDF);
 
-/* ══════════════════════════════════════════════
-   iOS SENSOR BERECHTIGUNG
-══════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────
+   iOS Permission (falls nötig)
+───────────────────────────────────────────── */
 const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-if (isIOS &&
-    typeof DeviceMotionEvent !== 'undefined' &&
-    typeof DeviceMotionEvent.requestPermission === 'function') {
-
+if (isIOS && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
   dom.iosPermBtn.hidden = false;
   dom.iosPermBtn.addEventListener('click', async () => {
     try {
@@ -678,52 +788,3 @@ if (isIOS &&
       } else {
         setStatus('Sensor-Erlaubnis verweigert!', 'is-error');
       }
-    } catch (err) {
-      setStatus('Fehler: ' + err.message, 'is-error');
-    }
-  });
-}
-
-/* ══════════════════════════════════════════════
-   PWA INSTALL
-══════════════════════════════════════════════ */
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  dom.installBanner.hidden = false;
-});
-
-dom.installBtn.addEventListener('click', async () => {
-  if (!deferredPrompt) {
-    setStatus('Install nicht verfügbar. Chrome: Menü (⋮) → „App installieren“.', 'is-error');
-    return;
-  }
-  deferredPrompt.prompt();
-  const { outcome } = await deferredPrompt.userChoice;
-  if (outcome === 'accepted') dom.installBanner.hidden = true;
-  deferredPrompt = null;
-});
-
-window.addEventListener('appinstalled', () => {
-  dom.installBanner.hidden = true;
-  deferredPrompt = null;
-});
-
-/* ══════════════════════════════════════════════
-   SERVICE WORKER
-══════════════════════════════════════════════ */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  });
-}
-
-/* ══════════════════════════════════════════════
-   INITIALISIERUNG
-══════════════════════════════════════════════ */
-updateUnitLabels();
-applyToggle('x', true);
-applyToggle('y', true);
-applyToggle('z', true);
-applyToggle('t', true);
-resetState();
