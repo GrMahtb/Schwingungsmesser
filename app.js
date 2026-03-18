@@ -694,7 +694,10 @@ window.addEventListener('beforeinstallprompt', e => {
 });
 
 dom.installBtn.addEventListener('click', async () => {
-  if (!deferredPrompt) return;
+  if (!deferredPrompt) {
+    setStatus('Install nicht verfügbar. Chrome: Menü (⋮) → „App installieren“.', 'is-error');
+    return;
+  }
   deferredPrompt.prompt();
   const { outcome } = await deferredPrompt.userChoice;
   if (outcome === 'accepted') dom.installBanner.hidden = true;
