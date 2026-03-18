@@ -7,11 +7,6 @@
   --text:#f2f2f2;
   --muted:#8a8a92;
 
-  --x:#ff4444;
-  --y:#00cc66;
-  --z:#4499ff;
-  --t:#ffed00;
-
   --r:16px;
 }
 
@@ -245,7 +240,7 @@ button.tile{
   color:#444;
 }
 
-/* Toggle-off style (applied via JS) */
+/* Toggle-off style */
 .is-off{ opacity:.30; filter:grayscale(80%); }
 .legendBtn.is-off{ text-decoration: line-through; }
 
@@ -306,6 +301,7 @@ canvas{
 .btn--ghost{ background:var(--card2); border:1px solid var(--border); color:var(--muted); }
 .btn--warn{ background:#cc8800; color:#111; font-weight:950; }
 .btn--ok{ background:#152818; border:1px solid #1f3b25; color:#00cc66; }
+.btn--stop{ background:#cc0000; color:#ffffff; }
 
 /* DIN table */
 .din{
@@ -344,7 +340,7 @@ canvas{
 .debug summary::-webkit-details-marker{ display:none; }
 #debugPanel{
   margin-top:10px;
-  height:120px;          /* verhindert Layout-Springen */
+  height:120px;
   overflow:auto;
   background:#0b0b0c;
   border:1px solid var(--border);
