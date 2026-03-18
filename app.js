@@ -571,8 +571,7 @@ $('csvBtn').addEventListener('click', exportCSV);
 /* ══════════════════════════════════════════════
    PDF (wie vorher)
 ══════════════════════════════════════════════ */
-$('pdfBtn').addEventListener('click', () => {
-  /* ══════════════════════════════════════════════
+/* ══════════════════════════════════════════════
    PDF (3 Plots, wissenschaftlich, A4, weiß)
 ══════════════════════════════════════════════ */
 function plotToDataURL({ series, title, unit, color, durationSec }) {
