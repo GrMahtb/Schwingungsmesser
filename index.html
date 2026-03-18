@@ -1,817 +1,96 @@
 <!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Schwingungsmesser mm/s (XYZ)</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{
-      background:#0d0d1a;color:#e0e0e0;
-      font-family:'Segoe UI',Arial,sans-serif;
-      min-height:100vh;padding:16px;
-      max-width:650px;margin:0 auto;
-    }
-    .app-header{text-align:center;margin-bottom:14px;}
-    .app-header h1{font-size:1.45em;color:#4fc3f7;}
-    .app-header p{font-size:0.78em;color:#555;margin-top:3px;}
+}
 
-    .status-bar{
-      border-radius:9px;padding:9px 14px;font-size:0.8em;text-align:center;
-      margin-bottom:12px;border:1px solid #2a2a4a;background:#1a1a2e;
-      color:#888;transition:all .3s;
-    }
-    .status-bar.running{color:#69db7c;border-color:#2d6a4f;background:#0d1f16;}
-    .status-bar.done{color:#4fc3f7;border-color:#1a4a6b;background:#0d1a2e;}
-    .status-bar.error{color:#ff6b6b;border-color:#6b1c1c;background:#1f0d0d;}
+function copyLink(btn){
+  const txt=document.getElementById('linkBox').textContent;
+  (navigator.clipboard?.writeText(txt)||Promise.reject())
+    .then(()=>{const o=btn.textContent;btn.textContent='Kopiert';setTimeout(()=>btn.textContent=o,1400);})
+    .catch(()=>{const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);});
+}
 
-    .card{background:#1a1a2e;border-radius:13px;padding:14px;margin-bottom:12px;border:1px solid #2a2a4a;}
-    .card-title{font-size:0.75em;color:#4fc3f7;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;margin-bottom:10px;}
+function tryLoadFromHash(){
+  const m=location.hash.match(/#d=([A-Za-z0-9\-_]+)/);
+  if(!m) return false;
 
-    .main-value{
-      font-size:3.4em;font-weight:800;text-align:center;
-      font-variant-numeric:tabular-nums;line-height:1;margin:8px 0 4px;
-    }
-    .main-unit{font-size:.42em;color:#4fc3f7;font-weight:400;}
+  try{
+    const p=JSON.parse(fromB64Url(m[1]));
 
-    .stats-grid{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:8px;margin:12px 0 0;
-    }
-    .stat-box{
-      background:#0d0d1a;border-radius:8px;padding:10px 6px;
-      text-align:center;border:1px solid #2a2a4a;
-    }
-    .stat-label{font-size:.64em;color:#555;text-transform:uppercase;letter-spacing:.5px;}
-    .stat-val{font-size:1.2em;font-weight:700;margin:3px 0 1px;font-variant-numeric:tabular-nums;}
-    .stat-unit{font-size:.58em;color:#444;}
-
-    .dur-row{ text-align:center; margin-top:10px; }
-    .dur-badge{
-      display:inline-block;background:#0d0d1a;border:1px solid #2a2a4a;
-      border-radius:20px;padding:3px 10px;font-size:.75em;color:#555;
-      font-variant-numeric:tabular-nums;
+    // restore visible
+    if(p.visible){
+      for(const k of ['vx','vy','vz','vt']){
+        if(typeof p.visible[k]==='boolean') visible[k]=p.visible[k];
+      }
+      // update UI off-states
+      for(const k of ['vx','vy','vz','vt']){
+        document.querySelectorAll(`[data-series="${k}"]`).forEach(el=>{
+          el.classList.toggle('off', !visible[k]);
+        });
+      }
     }
 
-    canvas{width:100%;background:#0a0a15;border-radius:10px;border:1px solid #2a2a4a;display:block;}
-    #liveChart{height:190px;}
-    #resultChart{height:230px;}
-
-    .time-axis{display:flex;justify-content:space-between;font-size:.62em;color:#444;padding:2px 4px;margin-top:4px;}
-
-    .legend{
-      display:flex; gap:12px; flex-wrap:wrap; justify-content:center;
-      font-size:.74em; color:#777; margin-top:10px;
-    }
-    .legend .item{display:flex;align-items:center;gap:6px;}
-    .swatch{width:12px;height:3px;border-radius:2px;display:inline-block;}
-    .sw-x{background:#ff6b6b;}
-    .sw-y{background:#69db7c;}
-    .sw-z{background:#4dabf7;}
-    .sw-t{background:#00e5ff;}
-
-    .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:8px 0;}
-    .btn{
-      padding:11px 18px;border-radius:28px;border:none;
-      font-size:.9em;font-weight:600;cursor:pointer;
-      transition:all .2s;display:inline-flex;align-items:center;gap:6px;
-    }
-    .btn:active{opacity:.85;transform:scale(.98);}
-    .btn-primary{background:linear-gradient(135deg,#00b4d8,#0077b6);color:#fff;}
-    .btn-stop{background:linear-gradient(135deg,#e63946,#c1121f);color:#fff;}
-    .btn-secondary{background:#252540;color:#999;border:1px solid #2a2a4a;}
-    .btn-green{background:linear-gradient(135deg,#2d6a4f,#1b4332);color:#69db7c;border:1px solid #2d6a4f;}
-    .btn-share{background:linear-gradient(135deg,#7209b7,#480ca8);color:#fff;}
-    .btn-ios{background:linear-gradient(135deg,#f77f00,#d62828);color:#fff;display:none;}
-
-    .norm-table{width:100%;border-collapse:collapse;font-size:.78em;}
-    .norm-table td{padding:6px 4px;border-bottom:1px solid #1e1e36;vertical-align:middle;}
-    .norm-table tr:last-child td{border-bottom:none;}
-    .norm-table tr.active-norm td{background:rgba(255,255,255,.07);}
-    .norm-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;}
-    .norm-range{font-weight:700;color:#ccc;}
-    .norm-desc{color:#777;text-align:right;}
-
-    #resultsPanel{display:none;}
-    .section-sep{border:none;border-top:1px solid #2a2a4a;margin:16px 0;}
-
-    .link-box{
-      background:#0a0a15;border:1px solid #2a2a4a;border-radius:8px;
-      padding:10px;font-size:.7em;color:#888;word-break:break-all;
-      max-height:90px;overflow-y:auto;font-family:monospace;
-      margin-top:8px;line-height:1.5;
-    }
-    .link-note{font-size:.67em;color:#ff9800;text-align:center;margin-top:6px;}
-
-    #debugPanel{
-      background:#0a0a15;border:1px solid #2a2a4a;border-radius:8px;
-      padding:10px;font-size:.7em;font-family:monospace;color:#aaa;
-      white-space:pre-wrap;line-height:1.6;margin-top:0;
-    }
-
-    .footer{text-align:center;font-size:.63em;color:#333;margin-top:14px;padding-bottom:24px;}
-  </style>
-</head>
-
-<body>
-  <div class="app-header">
-    <h1>📳 Schwingungsmesser</h1>
-    <p>mm/s pro Achse (X/Y/Z) + Total · Live: letzte 10 s</p>
-  </div>
-
-  <div class="status-bar" id="statusBar">Bereit – Drücke Start</div>
-
-  <!-- Live / Measurement View -->
-  <div id="measureView">
-    <div class="card">
-      <div class="main-value">
-        <span id="mainNum" style="color:#00e5ff">0.00</span>
-        <span class="main-unit">mm/s (Total)</span>
-      </div>
-
-      <div class="stats-grid">
-        <div class="stat-box">
-          <div class="stat-label">X</div>
-          <div class="stat-val" id="vxVal" style="color:#ff6b6b">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Y</div>
-          <div class="stat-val" id="vyVal" style="color:#69db7c">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Z</div>
-          <div class="stat-val" id="vzVal" style="color:#4dabf7">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-
-        <div class="stat-box">
-          <div class="stat-label">Peak (Total)</div>
-          <div class="stat-val" id="peakVal" style="color:#ffb703">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">RMS (Total)</div>
-          <div class="stat-val" id="rmsVal" style="color:#adb5bd">0.00</div>
-          <div class="stat-unit">mm/s</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Events</div>
-          <div class="stat-val" id="evtVal" style="color:#aaa">0</div>
-          <div class="stat-unit">#</div>
-        </div>
-      </div>
-
-      <div class="dur-row">
-        <span style="font-size:.73em;color:#444">Dauer: </span>
-        <span class="dur-badge" id="durBadge">00:00</span>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Live-Verlauf (letzte 10 Sekunden)</div>
-      <canvas id="liveChart"></canvas>
-      <div class="time-axis" id="liveAxis"></div>
-
-      <div class="legend">
-        <div class="item"><span class="swatch sw-x"></span> X</div>
-        <div class="item"><span class="swatch sw-y"></span> Y</div>
-        <div class="item"><span class="swatch sw-z"></span> Z</div>
-        <div class="item"><span class="swatch sw-t"></span> Total</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Steuerung</div>
-      <div class="btn-row" style="margin-top:12px">
-        <button class="btn btn-ios" id="permBtn" onclick="requestPermission()">🔐 iOS Sensorerlaubnis</button>
-        <button class="btn btn-primary" id="startBtn" onclick="toggleMeasurement()">▶ Start</button>
-        <button class="btn btn-secondary" onclick="resetAll()">↺ Reset</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">🔧 Debug / Sensor-Status</div>
-      <div id="debugPanel">Warte auf Sensor-Daten …</div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Bewertung nach DIN 4150-2 (Total)</div>
-      <table class="norm-table">
-        <tr id="n0"><td><span class="norm-dot" style="background:#00e676"></span><span class="norm-range">&lt; 0.3 mm/s</span></td><td class="norm-desc">Kaum wahrnehmbar</td></tr>
-        <tr id="n1"><td><span class="norm-dot" style="background:#aeea00"></span><span class="norm-range">0.3 – 1.0 mm/s</span></td><td class="norm-desc">Schwach wahrnehmbar</td></tr>
-        <tr id="n2"><td><span class="norm-dot" style="background:#ffd600"></span><span class="norm-range">1.0 – 3.0 mm/s</span></td><td class="norm-desc">Deutlich wahrnehmbar</td></tr>
-        <tr id="n3"><td><span class="norm-dot" style="background:#ff9800"></span><span class="norm-range">3.0 – 10 mm/s</span></td><td class="norm-desc">Stark – Gebäude prüfen</td></tr>
-        <tr id="n4"><td><span class="norm-dot" style="background:#ff1744"></span><span class="norm-range">&gt; 10 mm/s</span></td><td class="norm-desc">⚠️ Schäden möglich</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <!-- Results Panel -->
-  <div id="resultsPanel">
-    <hr class="section-sep" />
-
-    <div style="text-align:center;margin-bottom:12px;">
-      <div style="font-size:1.1em;color:#4fc3f7;font-weight:700">📊 Messergebnis</div>
-      <div style="font-size:.75em;color:#555;margin-top:3px" id="resMeta">—</div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Messverlauf (komplett · X/Y/Z/Total)</div>
-      <canvas id="resultChart"></canvas>
-      <div class="time-axis" id="resAxis"></div>
-      <div class="legend">
-        <div class="item"><span class="swatch sw-x"></span> X</div>
-        <div class="item"><span class="swatch sw-y"></span> Y</div>
-        <div class="item"><span class="swatch sw-z"></span> Z</div>
-        <div class="item"><span class="swatch sw-t"></span> Total</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Export & Teilen</div>
-      <div class="btn-row">
-        <button class="btn btn-green" onclick="exportCSV()">📥 CSV (XYZ)</button>
-        <button class="btn btn-share" onclick="generateShareLink()">🔗 Link</button>
-        <button class="btn btn-secondary" onclick="resetAll()">↺ Neue Messung</button>
-      </div>
-
-      <div id="linkArea" style="display:none">
-        <div class="link-box" id="linkBox"></div>
-        <div class="btn-row" style="margin-top:8px">
-          <button class="btn btn-secondary" style="font-size:.82em" onclick="copyLink(this)">📋 Kopieren</button>
-        </div>
-        <p class="link-note" id="linkNote"></p>
-      </div>
-    </div>
-  </div>
-
-  <p class="footer">
-    ⚠️ Smartphone-Sensoren sind nicht werkskalibriert.<br>
-    Werte dienen der Orientierung – kein Ersatz für geeichte Messgeräte.
-  </p>
-
-<script>
-/* ─────────────────────────────────────────────────────────
-   Konfiguration
-────────────────────────────────────────────────────────── */
-const LIVE_WINDOW_MS = 10_000;     // letzte 10 Sekunden im Live-Chart
-const MAX_RECORDED_POINTS = 30_000; // CSV / Ergebnis (Limit gegen RAM)
-const HP = 0.97;                   // High-pass (Drift/Gravitation reduzieren)
-const LEAK = 0.985;                // Leaky Integrator (Drift begrenzen)
-
-/* ─────────────────────────────────────────────────────────
-   State
-────────────────────────────────────────────────────────── */
-let measuring = false;
-let lastTime = null;
-let measureStart = null;
-let durationTimer = null;
-let noDataTimer = null;
-
-let motionEventCount = 0;
-
-// Integrator state
-let vX=0, vY=0, vZ=0;
-let hpX=0, hpY=0, hpZ=0;
-let lastAX=0, lastAY=0, lastAZ=0;
-
-// Stats (Total)
-let peakTotal = 0;
-let squaredSumTotal = 0;
-let sampleCount = 0;
-
-// Live history (zeitbasiert)
-let history = []; // {t, vx, vy, vz, vt}
-
-// Full recording
-let recorded = []; // {t, vx, vy, vz, vt, ax, ay, az}
-
-/* ─────────────────────────────────────────────────────────
-   Canvas setup (draw in CSS pixels; DPR handled by transform)
-────────────────────────────────────────────────────────── */
-const liveC = document.getElementById('liveChart');
-const resC  = document.getElementById('resultChart');
-const liveCtx = liveC.getContext('2d');
-const resCtx  = resC.getContext('2d');
-
-function setupCanvas(canvas, ctx) {
-  const dpr = window.devicePixelRatio || 1;
-  const cssW = canvas.clientWidth;
-  const cssH = canvas.clientHeight;
-  canvas.width = Math.floor(cssW * dpr);
-  canvas.height = Math.floor(cssH * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return {W: cssW, H: cssH};
-}
-
-function resizeAll() {
-  setupCanvas(liveC, liveCtx);
-  setupCanvas(resC, resCtx);
-  drawLive();
-  drawResult();
-}
-window.addEventListener('resize', resizeAll);
-resizeAll();
-
-/* ─────────────────────────────────────────────────────────
-   Helpers
-────────────────────────────────────────────────────────── */
-function setStatus(msg, cls='') {
-  const el = document.getElementById('statusBar');
-  el.textContent = msg;
-  el.className = 'status-bar ' + cls;
-}
-
-function fmtTime(ms) {
-  const s = Math.floor(ms/1000);
-  const m = Math.floor(s/60);
-  return String(m).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
-}
-
-function getColorTotal(v) {
-  if (v <  0.3) return '#00e676';
-  if (v <  1.0) return '#aeea00';
-  if (v <  3.0) return '#ffd600';
-  if (v < 10.0) return '#ff9800';
-  return '#ff1744';
-}
-
-function highlightNorm(v) {
-  ['n0','n1','n2','n3','n4'].forEach(id => document.getElementById(id).classList.remove('active-norm'));
-  const idx = v < 0.3 ? 0 : v < 1 ? 1 : v < 3 ? 2 : v < 10 ? 3 : 4;
-  document.getElementById('n'+idx).classList.add('active-norm');
-}
-
-/* ─────────────────────────────────────────────────────────
-   Sensor handler
-────────────────────────────────────────────────────────── */
-function handleMotion(e) {
-  motionEventCount++;
-  document.getElementById('evtVal').textContent = motionEventCount;
-
-  // Defensive sensor read
-  let ax = 0, ay = 0, az = 0;
-  if (e.accelerationIncludingGravity) {
-    ax = Number(e.accelerationIncludingGravity.x) || 0;
-    ay = Number(e.accelerationIncludingGravity.y) || 0;
-    az = Number(e.accelerationIncludingGravity.z) || 0;
-  }
-  if (e.acceleration && (e.acceleration.x != null || e.acceleration.y != null || e.acceleration.z != null)) {
-    ax = (Number(e.acceleration.x) || ax);
-    ay = (Number(e.acceleration.y) || ay);
-    az = (Number(e.acceleration.z) || az);
-  }
-
-  // Debug output (every 10th)
-  if (motionEventCount % 10 === 0) {
-    document.getElementById('debugPanel').textContent =
-      `devicemotion Events: ${motionEventCount}\n` +
-      `acc (ohne G): x=${(e.acceleration?.x ?? 'n/a')} y=${(e.acceleration?.y ?? 'n/a')} z=${(e.acceleration?.z ?? 'n/a')}\n` +
-      `acc (mit G) : x=${(e.accelerationIncludingGravity?.x ?? 'n/a')} y=${(e.accelerationIncludingGravity?.y ?? 'n/a')} z=${(e.accelerationIncludingGravity?.z ?? 'n/a')}\n` +
-      `used ax/ay/az: ${ax.toFixed(3)} / ${ay.toFixed(3)} / ${az.toFixed(3)} (m/s²)\n` +
-      `measuring: ${measuring}`;
-  }
-
-  if (!measuring) return;
-
-  // Timing
-  const nowPerf = performance.now();
-  if (!lastTime) { lastTime = nowPerf; return; }
-  const dt = (nowPerf - lastTime) / 1000;
-  lastTime = nowPerf;
-  if (dt <= 0 || dt > 0.2) return;
-
-  // High-pass filter
-  hpX = HP * (hpX + ax - lastAX);
-  hpY = HP * (hpY + ay - lastAY);
-  hpZ = HP * (hpZ + az - lastAZ);
-  lastAX = ax; lastAY = ay; lastAZ = az;
-
-  // Integrate -> mm/s
-  vX = (vX + hpX * dt * 1000) * LEAK;
-  vY = (vY + hpY * dt * 1000) * LEAK;
-  vZ = (vZ + hpZ * dt * 1000) * LEAK;
-
-  // We show per-axis as absolute vibration speed (mm/s)
-  const vx = Math.abs(vX);
-  const vy = Math.abs(vY);
-  const vz = Math.abs(vZ);
-  const vt = Math.sqrt(vX*vX + vY*vY + vZ*vZ); // total magnitude (mm/s)
-
-  // Stats Total
-  if (vt > peakTotal) peakTotal = vt;
-  squaredSumTotal += vt * vt;
-  sampleCount++;
-
-  // Record
-  const t = Date.now();
-  history.push({t, vx, vy, vz, vt});
-  while (history.length && history[0].t < t - LIVE_WINDOW_MS) history.shift();
-
-  if (recorded.length < MAX_RECORDED_POINTS) {
-    recorded.push({
-      t, vx:+vx.toFixed(3), vy:+vy.toFixed(3), vz:+vz.toFixed(3), vt:+vt.toFixed(3),
-      ax:+ax.toFixed(3), ay:+ay.toFixed(3), az:+az.toFixed(3)
-    });
-  }
-
-  updateUI(vx, vy, vz, vt);
-}
-
-/* ─────────────────────────────────────────────────────────
-   UI update
-────────────────────────────────────────────────────────── */
-function updateUI(vx, vy, vz, vt) {
-  const colT = getColorTotal(vt);
-
-  document.getElementById('mainNum').textContent = vt.toFixed(2);
-  document.getElementById('mainNum').style.color = colT;
-
-  document.getElementById('vxVal').textContent = vx.toFixed(2);
-  document.getElementById('vyVal').textContent = vy.toFixed(2);
-  document.getElementById('vzVal').textContent = vz.toFixed(2);
-
-  document.getElementById('peakVal').textContent = peakTotal.toFixed(2);
-  const rms = sampleCount > 0 ? Math.sqrt(squaredSumTotal / sampleCount) : 0;
-  document.getElementById('rmsVal').textContent = rms.toFixed(2);
-
-  highlightNorm(peakTotal);
-
-  drawLive();
-}
-
-/* ─────────────────────────────────────────────────────────
-   Drawing (multi-line)
-────────────────────────────────────────────────────────── */
-function drawGrid(ctx, W, H) {
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle = '#0a0a15';
-  ctx.fillRect(0,0,W,H);
-
-  ctx.strokeStyle = '#1a1a2e';
-  ctx.lineWidth = 1;
-  for(let i=1;i<5;i++){
-    ctx.beginPath(); ctx.moveTo(i*W/5,0); ctx.lineTo(i*W/5,H); ctx.stroke();
-  }
-  for(let i=1;i<4;i++){
-    ctx.beginPath(); ctx.moveTo(0,i*H/4); ctx.lineTo(W,i*H/4); ctx.stroke();
-  }
-}
-
-function drawSeries(ctx, points, W, H, valueKey, color, scaleMax, t0, t1) {
-  if (points.length < 2) return;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i=0;i<points.length;i++){
-    const p = points[i];
-    const x = ((p.t - t0) / (t1 - t0)) * W;
-    const y = H - (p[valueKey] / scaleMax) * H * 0.88;
-    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  }
-  ctx.stroke();
-}
-
-function drawLive() {
-  const {W, H} = setupCanvas(liveC, liveCtx);
-  drawGrid(liveCtx, W, H);
-  if (history.length < 2) return;
-
-  const t1 = Date.now();
-  const t0 = t1 - LIVE_WINDOW_MS;
-
-  // scale by maximum of all shown series in current window
-  let maxVal = 1;
-  for (const p of history) {
-    maxVal = Math.max(maxVal, p.vx, p.vy, p.vz, p.vt);
-  }
-  maxVal *= 1.15;
-
-  // Draw lines
-  drawSeries(liveCtx, history, W, H, 'vx', '#ff6b6b', maxVal, t0, t1);
-  drawSeries(liveCtx, history, W, H, 'vy', '#69db7c', maxVal, t0, t1);
-  drawSeries(liveCtx, history, W, H, 'vz', '#4dabf7', maxVal, t0, t1);
-  drawSeries(liveCtx, history, W, H, 'vt', '#00e5ff', maxVal, t0, t1);
-
-  // Scale label
-  liveCtx.fillStyle='#555';
-  liveCtx.font='11px Arial';
-  liveCtx.fillText(`Skala: ${maxVal.toFixed(1)} mm/s`, 8, 14);
-
-  // time axis labels
-  const axis = document.getElementById('liveAxis');
-  axis.innerHTML = '';
-  for (let i=0;i<=5;i++){
-    const sec = (-LIVE_WINDOW_MS/1000 + (LIVE_WINDOW_MS/1000)*(i/5)).toFixed(0);
-    const span = document.createElement('span');
-    span.textContent = (sec === '0') ? 'jetzt' : `${sec}s`;
-    axis.appendChild(span);
-  }
-}
-
-function drawResult() {
-  if (!recorded.length) return;
-  const {W, H} = setupCanvas(resC, resCtx);
-  drawGrid(resCtx, W, H);
-  if (recorded.length < 2) return;
-
-  const t0 = recorded[0].t;
-  const t1 = recorded[recorded.length-1].t;
-
-  let maxVal = 1;
-  for (const p of recorded) maxVal = Math.max(maxVal, p.vx, p.vy, p.vz, p.vt);
-  maxVal *= 1.15;
-
-  // Lines
-  drawSeries(resCtx, recorded, W, H, 'vx', '#ff6b6b', maxVal, t0, t1);
-  drawSeries(resCtx, recorded, W, H, 'vy', '#69db7c', maxVal, t0, t1);
-  drawSeries(resCtx, recorded, W, H, 'vz', '#4dabf7', maxVal, t0, t1);
-  drawSeries(resCtx, recorded, W, H, 'vt', '#00e5ff', maxVal, t0, t1);
-
-  resCtx.fillStyle='#555';
-  resCtx.font='11px Arial';
-  resCtx.fillText(`Skala: ${maxVal.toFixed(1)} mm/s`, 8, 14);
-
-  // axis labels (0..duration)
-  const axis = document.getElementById('resAxis');
-  axis.innerHTML = '';
-  const durS = (t1 - t0)/1000;
-  for (let i=0;i<=5;i++){
-    const s = (durS*(i/5)).toFixed(1);
-    const span = document.createElement('span');
-    span.textContent = `${s}s`;
-    axis.appendChild(span);
-  }
-}
-
-/* ─────────────────────────────────────────────────────────
-   Start/Stop/Reset
-────────────────────────────────────────────────────────── */
-function toggleMeasurement() {
-  measuring ? stopMeasurement() : startMeasurement();
-}
-
-function startMeasurement() {
-  measuring = true;
-  lastTime = null;
-  measureStart = Date.now();
-
-  // reset integrator + stats
-  vX=vY=vZ=0;
-  hpX=hpY=hpZ=0;
-  lastAX=lastAY=lastAZ=0;
-
-  peakTotal = 0;
-  squaredSumTotal = 0;
-  sampleCount = 0;
-  history = [];
-  recorded = [];
-
-  motionEventCount = 0;
-  document.getElementById('evtVal').textContent = '0';
-
-  document.getElementById('startBtn').textContent = '⏹ Stop';
-  document.getElementById('startBtn').className = 'btn btn-stop';
-  document.getElementById('resultsPanel').style.display = 'none';
-  document.getElementById('linkArea').style.display = 'none';
-
-  setStatus('🟢 Messung läuft …', 'running');
-  document.getElementById('debugPanel').textContent = 'Warte auf Events …';
-
-  clearInterval(durationTimer);
-  durationTimer = setInterval(() => {
-    document.getElementById('durBadge').textContent = fmtTime(Date.now() - measureStart);
-  }, 500);
-
-  clearTimeout(noDataTimer);
-  noDataTimer = setTimeout(() => {
-    if (motionEventCount === 0) {
-      setStatus('❌ Keine Sensor-Daten! (devicemotion)', 'error');
-      document.getElementById('debugPanel').textContent =
-        'devicemotion Events: 0 nach 2 Sekunden.\n\n' +
-        'Bitte prüfen:\n' +
-        '• Chrome: Website-Einstellungen → Bewegungssensoren → Zulassen\n' +
-        '• Android: "Sensoren aus" deaktivieren (Quick Settings)\n' +
-        '• Energiesparen aus\n' +
-        '• Alternativ: Firefox / Samsung Internet testen';
-    }
-  }, 2000);
-}
-
-function stopMeasurement() {
-  measuring = false;
-  clearInterval(durationTimer);
-  clearTimeout(noDataTimer);
-
-  document.getElementById('startBtn').textContent = '▶ Start';
-  document.getElementById('startBtn').className = 'btn btn-primary';
-  setStatus('✅ Messung abgeschlossen', 'done');
-
-  if (recorded.length) showResults();
-}
-
-function resetAll() {
-  measuring = false;
-  clearInterval(durationTimer);
-  clearTimeout(noDataTimer);
-
-  peakTotal = 0;
-  squaredSumTotal = 0;
-  sampleCount = 0;
-  history = [];
-  recorded = [];
-  vX=vY=vZ=hpX=hpY=hpZ=lastAX=lastAY=lastAZ=0;
-
-  document.getElementById('mainNum').textContent = '0.00';
-  document.getElementById('mainNum').style.color = '#00e5ff';
-  document.getElementById('vxVal').textContent = '0.00';
-  document.getElementById('vyVal').textContent = '0.00';
-  document.getElementById('vzVal').textContent = '0.00';
-  document.getElementById('peakVal').textContent = '0.00';
-  document.getElementById('rmsVal').textContent = '0.00';
-  document.getElementById('durBadge').textContent = '00:00';
-  document.getElementById('evtVal').textContent = '0';
-  document.getElementById('resultsPanel').style.display = 'none';
-  document.getElementById('linkArea').style.display = 'none';
-  document.getElementById('debugPanel').textContent = 'Warte auf Sensor-Daten …';
-
-  ['n0','n1','n2','n3','n4'].forEach(id => document.getElementById(id).classList.remove('active-norm'));
-  setStatus('Bereit – Drücke Start');
-
-  drawLive();
-  drawResult();
-}
-
-/* ─────────────────────────────────────────────────────────
-   Results + CSV
-────────────────────────────────────────────────────────── */
-function showResults() {
-  const t0 = recorded[0].t;
-  const t1 = recorded[recorded.length-1].t;
-  const dur = ((t1 - t0)/1000).toFixed(1);
-  const ts = new Date(t0).toLocaleString('de-DE');
-
-  document.getElementById('resMeta').textContent =
-    `${ts} · Dauer: ${dur}s · Punkte: ${recorded.length} · Peak(Total): ${peakTotal.toFixed(2)} mm/s`;
-
-  document.getElementById('resultsPanel').style.display = 'block';
-  setTimeout(() => {
-    drawResult();
-  }, 60);
-
-  document.getElementById('resultsPanel').scrollIntoView({behavior:'smooth'});
-}
-
-function exportCSV() {
-  if (!recorded.length) { alert('Keine Messdaten vorhanden.'); return; }
-
-  const t0 = recorded[0].t;
-  const t1 = recorded[recorded.length-1].t;
-  const dur = ((t1 - t0)/1000).toFixed(1);
-  const ts = new Date(t0).toLocaleString('de-DE');
-  const rms = sampleCount > 0 ? Math.sqrt(squaredSumTotal / sampleCount) : 0;
-
-  let csv = '';
-  csv += '# Schwingungsmesser Export (XYZ)\n';
-  csv += `# Datum/Zeit Start: ${ts}\n`;
-  csv += `# Dauer: ${dur} s\n`;
-  csv += `# Punkte: ${recorded.length}\n`;
-  csv += `# Peak Total: ${peakTotal.toFixed(3)} mm/s\n`;
-  csv += `# RMS Total: ${rms.toFixed(3)} mm/s\n`;
-  csv += '#\n';
-  csv += 'Zeit_ms;Zeit_s;Vx_mm_s;Vy_mm_s;Vz_mm_s;Vtotal_mm_s;Ax_m_s2;Ay_m_s2;Az_m_s2\n';
-
-  for (const d of recorded) {
-    const ms = d.t - t0;
-    csv += `${ms};${(ms/1000).toFixed(3)};${d.vx};${d.vy};${d.vz};${d.vt};${d.ax};${d.ay};${d.az}\n`;
-  }
-
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `schwingung_xyz_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-/* ─────────────────────────────────────────────────────────
-   Share link (downsample XYZ) – kann länger werden!
-────────────────────────────────────────────────────────── */
-function toB64Url(str) {
-  return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');
-}
-function fromB64Url(s) {
-  let b = s.replace(/-/g,'+').replace(/_/g,'/');
-  while (b.length%4) b+='=';
-  return decodeURIComponent(escape(atob(b)));
-}
-
-function generateShareLink() {
-  if (!recorded.length) { alert('Keine Messdaten vorhanden.'); return; }
-
-  // XYZ im Link => größer. Daher stärker downsamplen.
-  const MAX = 250;
-  const step = Math.max(1, Math.floor(recorded.length / MAX));
-
-  const vx=[], vy=[], vz=[], vt=[];
-  for (let i=0; i<recorded.length; i+=step) {
-    vx.push(+recorded[i].vx.toFixed(2));
-    vy.push(+recorded[i].vy.toFixed(2));
-    vz.push(+recorded[i].vz.toFixed(2));
-    vt.push(+recorded[i].vt.toFixed(2));
-  }
-
-  const t0 = recorded[0].t;
-  const t1 = recorded[recorded.length-1].t;
-  const dt = Math.round((t1 - t0) / Math.max(1, vx.length-1));
-  const rms = sampleCount > 0 ? Math.sqrt(squaredSumTotal / sampleCount) : 0;
-
-  const payload = { t0, dt, vx, vy, vz, vt, peak:+peakTotal.toFixed(3), rms:+rms.toFixed(3) };
-  const base = window.location.href.split('#')[0];
-  const link = `${base}#d=${toB64Url(JSON.stringify(payload))}`;
-
-  document.getElementById('linkArea').style.display = 'block';
-  document.getElementById('linkBox').textContent = link;
-  document.getElementById('linkNote').textContent =
-    link.length > 8000
-      ? `⚠️ Link sehr lang (${link.length} Zeichen). Für WhatsApp/Email ggf. nur CSV teilen.`
-      : `✅ Link bereit (${link.length} Zeichen)`;
-}
-
-function copyLink(btn) {
-  const txt = document.getElementById('linkBox').textContent;
-  (navigator.clipboard?.writeText(txt) || Promise.reject())
-    .then(() => {
-      const old = btn.textContent;
-      btn.textContent = '✅ Kopiert!';
-      setTimeout(()=>btn.textContent=old, 1600);
-    })
-    .catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = txt; document.body.appendChild(ta);
-      ta.select(); document.execCommand('copy');
-      document.body.removeChild(ta);
-    });
-}
-
-function tryLoadFromHash() {
-  const m = location.hash.match(/#d=([A-Za-z0-9\-_]+)/);
-  if (!m) return false;
-  try {
-    const p = JSON.parse(fromB64Url(m[1]));
-    recorded = [];
-    for (let i=0;i<p.vt.length;i++){
-      const t = p.t0 + i*p.dt;
+    recorded=[];
+    for(let i=0;i<p.vt.length;i++){
       recorded.push({
-        t,
-        vx: p.vx[i] ?? 0, vy: p.vy[i] ?? 0, vz: p.vz[i] ?? 0, vt: p.vt[i] ?? 0,
+        t: p.t0 + i*p.dt,
+        vx: p.vx[i]??0, vy: p.vy[i]??0, vz: p.vz[i]??0, vt: p.vt[i]??0,
         ax:0, ay:0, az:0
       });
     }
-    peakTotal = p.peak ?? Math.max(...p.vt);
-    squaredSumTotal = (p.vt || []).reduce((s,v)=>s+v*v,0);
-    sampleCount = (p.vt || []).length;
+    peakTotal=p.peak ?? Math.max(...p.vt);
+    squaredSumTotal=(p.vt||[]).reduce((s,v)=>s+v*v,0);
+    sampleCount=(p.vt||[]).length;
 
-    setStatus('📤 Geteilte Messung geladen', 'done');
+    setStatus('Geteilte Messung geladen','done');
     showResults();
     return true;
-  } catch (e) {
-    setStatus('❌ Link konnte nicht geladen werden', 'error');
+  }catch(e){
+    setStatus('Link konnte nicht geladen werden','error');
     return false;
   }
 }
 
-/* ─────────────────────────────────────────────────────────
-   iOS permission (falls nötig)
-────────────────────────────────────────────────────────── */
-if (typeof DeviceMotionEvent !== 'undefined' &&
-    typeof DeviceMotionEvent.requestPermission === 'function') {
-  document.getElementById('permBtn').style.display = 'inline-flex';
+/* ========= iOS Permission ========= */
+if(typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'){
+  document.getElementById('permBtn').style.display='inline-flex';
 }
-function requestPermission() {
-  DeviceMotionEvent.requestPermission().then(state => {
-    if (state === 'granted') {
-      document.getElementById('permBtn').style.display = 'none';
-      setStatus('✅ Sensorerlaubnis erteilt – Drücke Start');
-    } else {
-      setStatus('❌ Sensorerlaubnis verweigert', 'error');
-    }
-  }).catch(err => setStatus('❌ Fehler: ' + err.message, 'error'));
+function requestPermission(){
+  DeviceMotionEvent.requestPermission().then(state=>{
+    if(state==='granted'){
+      document.getElementById('permBtn').style.display='none';
+      setStatus('Sensorerlaubnis erteilt – Drücke Start');
+    } else setStatus('Sensorerlaubnis verweigert','error');
+  }).catch(err=>setStatus('Fehler: '+err.message,'error'));
 }
 
-/* ─────────────────────────────────────────────────────────
-   Init: Listener einmal global + optional Link laden
-────────────────────────────────────────────────────────── */
-window.addEventListener('devicemotion', handleMotion, {passive:true});
-
-if (!tryLoadFromHash()) {
-  drawLive();
+/* ========= PWA Install ========= */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredPrompt=e;
+  document.getElementById('installBanner').style.display='flex';
+});
+function installPWA(){
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.finally(()=>{
+    deferredPrompt=null;
+    document.getElementById('installBanner').style.display='none';
+  });
 }
+window.addEventListener('appinstalled',()=>{
+  document.getElementById('installBanner').style.display='none';
+});
+
+/* ========= Service Worker ========= */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+/* ========= Init ========= */
+window.addEventListener('devicemotion',handleMotion,{passive:true});
+if(!tryLoadFromHash()) drawLive();
 </script>
 </body>
 </html>
