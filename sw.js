@@ -1,4 +1,4 @@
-const CACHE = 'htb-vibro-v7';
+const CACHE = 'htb-vibro-v8';
 
 const ASSETS = [
   './',
@@ -7,8 +7,8 @@ const ASSETS = [
   './app.js',
   './manifest.json',
   './icon.svg',
-  './icon-192.png',
-  './icon-512.png'
+  './launchericon-192x192.png',
+  './launchericon-512x512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -29,12 +29,10 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Network-First: immer zuerst vom Server holen
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((res) => {
-        // frische Antwort auch in Cache schreiben
         const clone = res.clone();
         caches.open(CACHE).then((cache) => cache.put(event.request, clone));
         return res;
