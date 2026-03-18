@@ -16,7 +16,12 @@ let savedData    = null;
 let deferredPrompt = null;
 let activeUnit   = 'vel';           // 'vel' | 'acc' | 'disp'
 let rec          = null;
+let noDataTimer = null;
+let motionEventCount = 0;
 
+function unitLabel(){
+  return activeUnit === 'vel' ? 'mm/s' : activeUnit === 'acc' ? 'm/s²' : 'mm';
+}
 // Roh-Sensor
 let rawX = 0, rawY = 0, rawZ = 0;
 
