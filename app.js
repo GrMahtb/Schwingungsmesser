@@ -652,34 +652,68 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ── PWA Install ────────────────────────── */
+ // ===== PWA Install (Android/Chrome) =====
+(() => {
+  const installBanner = document.getElementById('installBanner');
+  const installBtn = document.getElementById('installBtn');
+
+  if (!installBanner || !installBtn) return;
+
+  // Standard: Banner aus, Button deaktiviert
+  installBanner.hidden = true;
+  installBtn.disabled = true;
+
+  let deferredPrompt = null;
+
   window.addEventListener('beforeinstallprompt', (e) => {
+    // Chrome erlaubt prompt() nur, wenn wir das Event vorher "abfangen"
     e.preventDefault();
     deferredPrompt = e;
-    dom.installBanner.hidden = false;
+
+    // Jetzt erst Banner anzeigen + Button aktivieren
+    installBanner.hidden = false;
+    installBtn.disabled = false;
   });
 
-  dom.installBtn.addEventListener('click', async () => {
+  installBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Wenn kein Prompt verfügbar ist -> NICHT weiterleiten, nur Hinweis
     if (!deferredPrompt) {
-      setStatus('Install: Chrome Menü (⋮) → „App installieren"', 'is-error');
+      // Optional: Statusbar nutzen, falls vorhanden
+      const sb = document.getElementById('statusBar');
+      if (sb) {
+        sb.hidden = false;
+        sb.className = 'statusBar is-error';
+        sb.textContent = 'Installieren aktuell nicht verfügbar. Öffne Chrome-Menü (⋮) → „App installieren“.';
+      }
       return;
     }
+
+    // Prompt anzeigen
     deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') dom.installBanner.hidden = true;
+    const choice = await deferredPrompt.userChoice;
+
+    // Danach ist der Prompt "verbraucht"
     deferredPrompt = null;
+    installBtn.disabled = true;
+    installBanner.hidden = true;
+
+    // (Optional) falls abgelehnt: Hinweis
+    if (choice.outcome !== 'accepted') {
+      const sb = document.getElementById('statusBar');
+      if (sb) {
+        sb.hidden = false;
+        sb.className = 'statusBar is-error';
+        sb.textContent = 'Installation abgebrochen. Du kannst es später erneut versuchen.';
+      }
+    }
   });
 
   window.addEventListener('appinstalled', () => {
-    dom.installBanner.hidden = true;
     deferredPrompt = null;
+    installBtn.disabled = true;
+    installBanner.hidden = true;
   });
-
-  /* ── Init ───────────────────────────────── */
-  updateUnitLabels();
-  applyToggle('x', true);
-  applyToggle('y', true);
-  applyToggle('z', true);
-  applyToggle('t', true);
-  resetState();
-
-}); // Ende DOMContentLoaded
+})();
