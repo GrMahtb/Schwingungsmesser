@@ -12,118 +12,105 @@
             min-height:100vh;padding:16px;
             max-width:580px;margin:0 auto;
         }
-        /* ── Header ── */
         .app-header{text-align:center;margin-bottom:14px;}
         .app-header h1{font-size:1.45em;color:#4fc3f7;}
         .app-header p{font-size:0.78em;color:#555;margin-top:3px;}
-
-        /* ── Cards ── */
-        .card{background:#1a1a2e;border-radius:13px;padding:14px;margin-bottom:12px;border:1px solid #2a2a4a;}
-        .card-title{font-size:0.75em;color:#4fc3f7;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;margin-bottom:10px;}
-
-        /* ── Status bar ── */
+        .card{background:#1a1a2e;border-radius:13px;padding:14px;
+              margin-bottom:12px;border:1px solid #2a2a4a;}
+        .card-title{font-size:0.75em;color:#4fc3f7;text-transform:uppercase;
+                    letter-spacing:0.8px;font-weight:700;margin-bottom:10px;}
         .status-bar{
             border-radius:9px;padding:9px 14px;font-size:0.8em;text-align:center;
             margin-bottom:12px;border:1px solid #2a2a4a;background:#1a1a2e;
             color:#888;transition:all .3s;
         }
         .status-bar.running{color:#69db7c;border-color:#2d6a4f;background:#0d1f16;}
-        .status-bar.done   {color:#4fc3f7;border-color:#1a4a6b;background:#0d1a2e;}
-        .status-bar.error  {color:#ff6b6b;border-color:#6b1c1c;background:#1f0d0d;}
-
-        /* ── Main value ── */
+        .status-bar.done{color:#4fc3f7;border-color:#1a4a6b;background:#0d1a2e;}
+        .status-bar.error{color:#ff6b6b;border-color:#6b1c1c;background:#1f0d0d;}
         .main-value{font-size:3.8em;font-weight:800;text-align:center;
             font-variant-numeric:tabular-nums;line-height:1;margin:8px 0 4px;}
         .main-unit{font-size:.42em;color:#4fc3f7;font-weight:400;}
-
-        /* ── Stats grid ── */
         .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0;}
-        .stat-box{background:#0d0d1a;border-radius:8px;padding:10px 6px;text-align:center;border:1px solid #2a2a4a;}
+        .stat-box{background:#0d0d1a;border-radius:8px;padding:10px 6px;
+                  text-align:center;border:1px solid #2a2a4a;}
         .stat-label{font-size:.64em;color:#555;text-transform:uppercase;letter-spacing:.5px;}
-        .stat-val  {font-size:1.3em;font-weight:700;margin:3px 0 1px;font-variant-numeric:tabular-nums;}
-        .stat-unit {font-size:.58em;color:#444;}
-
-        /* ── Canvas ── */
-        canvas{width:100%;background:#0a0a15;border-radius:10px;border:1px solid #2a2a4a;display:block;}
-        #liveChart  {height:170px;}
-        #resultChart{height:210px;}
-
-        /* ── Time axis ── */
+        .stat-val{font-size:1.3em;font-weight:700;margin:3px 0 1px;
+                  font-variant-numeric:tabular-nums;}
+        .stat-unit{font-size:.58em;color:#444;}
+        canvas{width:100%;background:#0a0a15;border-radius:10px;
+               border:1px solid #2a2a4a;display:block;}
+        #liveChart{height:160px;}
+        #resultChart{height:200px;}
         .time-axis{display:flex;justify-content:space-between;
             font-size:.62em;color:#444;padding:2px 4px;margin-top:3px;}
-
-        /* ── Axis selector ── */
-        .axis-selector{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:6px 0;}
+        .axis-selector{display:flex;gap:6px;flex-wrap:wrap;
+                       justify-content:center;margin:6px 0;}
         .axis-btn{
             padding:5px 14px;border-radius:20px;border:1px solid #2a2a4a;
-            background:#0d0d1a;color:#666;font-size:.82em;cursor:pointer;transition:all .2s;
+            background:#0d0d1a;color:#666;font-size:.82em;cursor:pointer;
+            transition:all .2s;
         }
         .axis-btn.active{background:#0077b6;color:#fff;border-color:#0077b6;}
-
-        /* ── Buttons ── */
-        .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:8px 0;}
+        .btn-row{display:flex;gap:10px;justify-content:center;
+                 flex-wrap:wrap;margin:8px 0;}
         .btn{
             padding:11px 20px;border-radius:28px;border:none;
             font-size:.9em;font-weight:600;cursor:pointer;
             transition:all .2s;display:inline-flex;align-items:center;gap:6px;
         }
         .btn:active{opacity:.8;transform:scale(.97);}
-        .btn-primary  {background:linear-gradient(135deg,#00b4d8,#0077b6);color:#fff;}
-        .btn-stop     {background:linear-gradient(135deg,#e63946,#c1121f);color:#fff;}
+        .btn-primary{background:linear-gradient(135deg,#00b4d8,#0077b6);color:#fff;}
+        .btn-stop{background:linear-gradient(135deg,#e63946,#c1121f);color:#fff;}
         .btn-secondary{background:#252540;color:#999;border:1px solid #2a2a4a;}
-        .btn-green    {background:linear-gradient(135deg,#2d6a4f,#1b4332);color:#69db7c;border:1px solid #2d6a4f;}
-        .btn-share    {background:linear-gradient(135deg,#7209b7,#480ca8);color:#fff;}
-        .btn-ios      {background:linear-gradient(135deg,#f77f00,#d62828);color:#fff;display:none;}
-
-        /* ── Duration badge ── */
+        .btn-green{background:linear-gradient(135deg,#2d6a4f,#1b4332);
+                   color:#69db7c;border:1px solid #2d6a4f;}
+        .btn-share{background:linear-gradient(135deg,#7209b7,#480ca8);color:#fff;}
+        .btn-ios{background:linear-gradient(135deg,#f77f00,#d62828);
+                 color:#fff;display:none;}
         .dur-badge{
             display:inline-block;background:#0d0d1a;border:1px solid #2a2a4a;
             border-radius:20px;padding:3px 10px;font-size:.75em;color:#555;
             font-variant-numeric:tabular-nums;
         }
-
-        /* ── Norm table ── */
         .norm-table{width:100%;border-collapse:collapse;font-size:.78em;}
-        .norm-table td{padding:6px 4px;border-bottom:1px solid #1e1e36;vertical-align:middle;}
+        .norm-table td{padding:6px 4px;border-bottom:1px solid #1e1e36;
+                       vertical-align:middle;}
         .norm-table tr:last-child td{border-bottom:none;}
-        .norm-table tr.active-norm{background:rgba(255,255,255,.07);border-radius:6px;}
-        .norm-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+        .norm-table tr.active-norm td{background:rgba(255,255,255,.07);}
+        .norm-dot{display:inline-block;width:10px;height:10px;border-radius:50%;
+                  margin-right:6px;vertical-align:middle;}
         .norm-range{font-weight:700;color:#ccc;}
         .norm-desc{color:#777;text-align:right;}
-
-        /* ── Results section ── */
         #resultsPanel{display:none;}
         .section-sep{border:none;border-top:1px solid #2a2a4a;margin:16px 0;}
-
-        /* ── Link box ── */
         .link-box{
             background:#0a0a15;border:1px solid #2a2a4a;border-radius:8px;
             padding:10px;font-size:.7em;color:#888;word-break:break-all;
-            max-height:90px;overflow-y:auto;font-family:monospace;margin-top:8px;
-            line-height:1.4;
+            max-height:80px;overflow-y:auto;font-family:monospace;
+            margin-top:8px;line-height:1.5;
         }
-        .link-note{font-size:.67em;color:#555;text-align:center;margin-top:6px;}
-
-        /* ── Shared-only banner ── */
-        .shared-banner{
-            background:#0d1a2e;border:1px solid #1a4a6b;border-radius:10px;
-            padding:12px;text-align:center;font-size:.82em;color:#4fc3f7;margin-bottom:12px;
+        .link-note{font-size:.67em;color:#ff9800;text-align:center;margin-top:6px;}
+        /* Debug Panel */
+        #debugPanel{
+            background:#0a0a15;border:1px solid #2a2a4a;border-radius:8px;
+            padding:10px;font-size:.7em;font-family:monospace;color:#aaa;
+            white-space:pre-wrap;line-height:1.6;margin-top:0;
         }
-
-        .footer{text-align:center;font-size:.63em;color:#333;margin-top:14px;padding-bottom:24px;}
+        .footer{text-align:center;font-size:.63em;color:#333;
+                margin-top:14px;padding-bottom:24px;}
     </style>
 </head>
 <body>
 
-<!-- ═══════════════ HEADER ═══════════════ -->
+<!-- HEADER -->
 <div class="app-header">
     <h1>📳 Schwingungsmesser</h1>
-    <p>Schwinggeschwindigkeit in mm/s (v<sub>eff</sub>)</p>
+    <p>Schwinggeschwindigkeit in mm/s</p>
 </div>
 
-<div class="status-bar" id="statusBar">Bereit — Drücke Start</div>
+<div class="status-bar" id="statusBar">Bereit – Drücke Start</div>
 
-<!-- ═══════════════ MESSANSICHT ═══════════════ -->
+<!-- MESSANSICHT -->
 <div id="measureView">
 
     <!-- Live-Wert -->
@@ -155,13 +142,13 @@
         </div>
     </div>
 
-    <!-- Live-Diagramm -->
+    <!-- Live-Chart -->
     <div class="card">
         <div class="card-title">Live-Verlauf (letzte 5 s)</div>
         <canvas id="liveChart"></canvas>
     </div>
 
-    <!-- Achse + Steuerung -->
+    <!-- Steuerung -->
     <div class="card">
         <div class="card-title">Achse & Steuerung</div>
         <div class="axis-selector">
@@ -171,35 +158,63 @@
             <button class="axis-btn"        onclick="setAxis('z',this)">Z</button>
         </div>
         <div class="btn-row" style="margin-top:12px">
-            <button class="btn btn-ios"       id="permBtn"  onclick="requestPermission()">🔐 iOS-Sensorerlaubnis</button>
-            <button class="btn btn-primary"   id="startBtn" onclick="toggleMeasurement()">▶ Start</button>
+            <button class="btn btn-ios"       id="permBtn"  onclick="requestPermission()">
+                🔐 iOS Sensorerlaubnis
+            </button>
+            <button class="btn btn-primary"   id="startBtn" onclick="toggleMeasurement()">
+                ▶ Start
+            </button>
             <button class="btn btn-secondary" onclick="resetAll()">↺ Reset</button>
         </div>
+    </div>
+
+    <!-- Debug Panel -->
+    <div class="card">
+        <div class="card-title">🔧 Debug / Sensor-Status</div>
+        <div id="debugPanel">Warte auf Sensor-Daten …</div>
     </div>
 
     <!-- Normbewertung -->
     <div class="card">
         <div class="card-title">Bewertung nach DIN 4150-2</div>
         <table class="norm-table">
-            <tr id="n0"><td><span class="norm-dot" style="background:#00e676"></span><span class="norm-range">&lt; 0.3 mm/s</span></td><td class="norm-desc">Kaum wahrnehmbar</td></tr>
-            <tr id="n1"><td><span class="norm-dot" style="background:#aeea00"></span><span class="norm-range">0.3 – 1.0 mm/s</span></td><td class="norm-desc">Schwach wahrnehmbar</td></tr>
-            <tr id="n2"><td><span class="norm-dot" style="background:#ffd600"></span><span class="norm-range">1.0 – 3.0 mm/s</span></td><td class="norm-desc">Deutlich wahrnehmbar</td></tr>
-            <tr id="n3"><td><span class="norm-dot" style="background:#ff9800"></span><span class="norm-range">3.0 – 10 mm/s</span></td><td class="norm-desc">Stark – Gebäude prüfen</td></tr>
-            <tr id="n4"><td><span class="norm-dot" style="background:#ff1744"></span><span class="norm-range">&gt; 10 mm/s</span></td><td class="norm-desc">⚠️ Schäden möglich</td></tr>
+            <tr id="n0">
+                <td><span class="norm-dot" style="background:#00e676"></span>
+                    <span class="norm-range">&lt; 0.3 mm/s</span></td>
+                <td class="norm-desc">Kaum wahrnehmbar</td>
+            </tr>
+            <tr id="n1">
+                <td><span class="norm-dot" style="background:#aeea00"></span>
+                    <span class="norm-range">0.3 – 1.0 mm/s</span></td>
+                <td class="norm-desc">Schwach wahrnehmbar</td>
+            </tr>
+            <tr id="n2">
+                <td><span class="norm-dot" style="background:#ffd600"></span>
+                    <span class="norm-range">1.0 – 3.0 mm/s</span></td>
+                <td class="norm-desc">Deutlich wahrnehmbar</td>
+            </tr>
+            <tr id="n3">
+                <td><span class="norm-dot" style="background:#ff9800"></span>
+                    <span class="norm-range">3.0 – 10 mm/s</span></td>
+                <td class="norm-desc">Stark – Gebäude prüfen</td>
+            </tr>
+            <tr id="n4">
+                <td><span class="norm-dot" style="background:#ff1744"></span>
+                    <span class="norm-range">&gt; 10 mm/s</span></td>
+                <td class="norm-desc">⚠️ Schäden möglich</td>
+            </tr>
         </table>
     </div>
 </div>
 
-<!-- ═══════════════ ERGEBNISBEREICH ═══════════════ -->
+<!-- ERGEBNISBEREICH -->
 <div id="resultsPanel">
     <hr class="section-sep">
-
     <div style="text-align:center;margin-bottom:12px;">
         <div style="font-size:1.1em;color:#4fc3f7;font-weight:700">📊 Messergebnis</div>
         <div style="font-size:.75em;color:#555;margin-top:3px" id="resMeta">—</div>
     </div>
 
-    <!-- Zusammenfassung -->
     <div class="card">
         <div class="card-title">Zusammenfassung</div>
         <div class="stats-grid">
@@ -210,12 +225,12 @@
             </div>
             <div class="stat-box">
                 <div class="stat-label">RMS</div>
-                <div class="stat-val" id="resRms"  style="color:#69db7c">0.00</div>
+                <div class="stat-val" id="resRms" style="color:#69db7c">0.00</div>
                 <div class="stat-unit">mm/s</div>
             </div>
             <div class="stat-box">
                 <div class="stat-label">Datenpunkte</div>
-                <div class="stat-val" id="resPts"  style="color:#aaa">0</div>
+                <div class="stat-val" id="resPts" style="color:#aaa">0</div>
                 <div class="stat-unit">Stk.</div>
             </div>
         </div>
@@ -225,46 +240,604 @@
         </div>
     </div>
 
-    <!-- Ergebnis-Diagramm -->
+    <!-- Ergebnis-Chart -->
     <div class="card">
         <div class="card-title">Messverlauf (komplett)</div>
         <canvas id="resultChart"></canvas>
-        <div class="time-axis" id="timeAxis">
-            <span>0 s</span><span></span><span></span><span></span><span></span>
-        </div>
+        <div class="time-axis" id="resTimeAxis"></div>
     </div>
 
-    <!-- CSV & Teilen -->
+    <!-- Export -->
     <div class="card">
         <div class="card-title">Export & Teilen</div>
         <div class="btn-row">
-            <button class="btn btn-green" onclick="exportCSV()">📥 CSV herunterladen</button>
-            <button class="btn btn-share" onclick="generateShareLink()">🔗 Link erstellen</button>
+            <button class="btn btn-green"  onclick="exportCSV()">📥 CSV</button>
+            <button class="btn btn-share"  onclick="generateShareLink()">🔗 Link</button>
+            <button class="btn btn-secondary" onclick="resetAll()">↺ Neue Messung</button>
         </div>
         <div id="linkArea" style="display:none">
             <div class="link-box" id="linkBox"></div>
             <div class="btn-row" style="margin-top:8px">
-                <button class="btn btn-secondary" style="font-size:.82em" onclick="copyLink()">📋 Link kopieren</button>
+                <button class="btn btn-secondary" style="font-size:.82em"
+                        onclick="copyLink()">📋 Kopieren</button>
             </div>
             <p class="link-note" id="linkNote"></p>
         </div>
     </div>
 </div>
 
-<p class="footer">⚠️ Smartphone-Sensoren sind nicht werkskalibriert.<br>Werte dienen der Orientierung – kein Ersatz für geeichte Messgeräte.</p>
+<p class="footer">
+    ⚠️ Smartphone-Sensoren sind nicht werkskalibriert.<br>
+    Werte dienen der Orientierung – kein Ersatz für geeichte Messgeräte.
+</p>
 
-<!-- ═══════════════ JAVASCRIPT ═══════════════ -->
 <script>
-// ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════
 // STATE
-// ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════
 let measuring       = false;
 let lastTime        = null;
 let measureStart    = null;
 let durationTimer   = null;
+let noDataTimer     = null;
+let motionEventCount = 0;
 let selectedAxis    = 'all';
-let isSharedView    = false;
 
-// Filter / integrator
-let vX=0,vY=0,vZ=0, hpX=0,hpY=0,hpZ=0, lastAX=0,lastAY=0,lastAZ=0;
-const HP=0.97
+// Filter & Integrator
+let vX=0, vY=0, vZ=0;
+let hpX=0, hpY=0, hpZ=0;
+let lastAX=0, lastAY=0, lastAZ=0;
+const HP   = 0.97;
+const LEAK = 0.985;
+
+// Statistik
+let maxVelocity = 0;
+let squaredSum  = 0;
+let sampleCount = 0;
+
+// Live-Chart Puffer (~5s bei ~60Hz)
+const HIST = 300;
+let history = [];
+
+// Vollaufzeichnung für Ergebnis + CSV
+let recorded = []; // {t, v, ax, ay, az}
+
+// ═══════════════════════════════════════════════════
+// CANVAS SETUP
+// ═══════════════════════════════════════════════════
+const liveC  = document.getElementById('liveChart');
+const resC   = document.getElementById('resultChart');
+const liveCtx = liveC.getContext('2d');
+const resCtx  = resC.getContext('2d');
+
+function resizeCanvas(c) {
+    c.width  = c.offsetWidth  * (window.devicePixelRatio || 1);
+    c.height = c.offsetHeight * (window.devicePixelRatio || 1);
+}
+resizeCanvas(liveC);
+resizeCanvas(resC);
+window.addEventListener('resize', () => {
+    resizeCanvas(liveC);
+    resizeCanvas(resC);
+    drawLive();
+});
+
+// ═══════════════════════════════════════════════════
+// HILFSFUNKTIONEN
+// ═══════════════════════════════════════════════════
+function getColor(v) {
+    if (v <  0.3) return '#00e676';
+    if (v <  1.0) return '#aeea00';
+    if (v <  3.0) return '#ffd600';
+    if (v < 10.0) return '#ff9800';
+    return '#ff1744';
+}
+
+function normText(v) {
+    if (v <  0.3) return 'Kaum wahrnehmbar';
+    if (v <  1.0) return 'Schwach wahrnehmbar';
+    if (v <  3.0) return 'Deutlich wahrnehmbar';
+    if (v < 10.0) return 'Stark – Gebäude prüfen';
+    return '⚠️ Schäden möglich';
+}
+
+function highlightNorm(v) {
+    ['n0','n1','n2','n3','n4'].forEach(id =>
+        document.getElementById(id).classList.remove('active-norm'));
+    const idx = v < 0.3 ? 0 : v < 1 ? 1 : v < 3 ? 2 : v < 10 ? 3 : 4;
+    document.getElementById('n'+idx).classList.add('active-norm');
+}
+
+function fmtTime(ms) {
+    const s = Math.floor(ms/1000);
+    const m = Math.floor(s/60);
+    return String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+}
+
+function velMag(x, y, z) {
+    if (selectedAxis==='x') return Math.abs(x);
+    if (selectedAxis==='y') return Math.abs(y);
+    if (selectedAxis==='z') return Math.abs(z);
+    return Math.sqrt(x*x + y*y + z*z);
+}
+
+function setStatus(msg, cls='') {
+    const el = document.getElementById('statusBar');
+    el.textContent = msg;
+    el.className   = 'status-bar ' + cls;
+}
+
+// ═══════════════════════════════════════════════════
+// SENSOR HANDLER (mit Debug + robustem Fallback)
+// ═══════════════════════════════════════════════════
+function handleMotion(e) {
+    motionEventCount++;
+
+    // ── Defensive Sensor-Auslesung ──
+    let ax = 0, ay = 0, az = 0;
+
+    // Zuerst "with gravity" als Basis
+    if (e.accelerationIncludingGravity) {
+        ax = Number(e.accelerationIncludingGravity.x) || 0;
+        ay = Number(e.accelerationIncludingGravity.y) || 0;
+        az = Number(e.accelerationIncludingGravity.z) || 0;
+    }
+    // Überschreibe mit "without gravity" falls vorhanden
+    if (e.acceleration &&
+        (e.acceleration.x != null || e.acceleration.y != null)) {
+        ax = Number(e.acceleration.x) || ax;
+        ay = Number(e.acceleration.y) || ay;
+        az = Number(e.acceleration.z) || az;
+    }
+
+    // ── Debug-Panel (jedes 5. Event) ──
+    if (motionEventCount % 5 === 0) {
+        document.getElementById('debugPanel').textContent =
+            `devicemotion Events: ${motionEventCount}\n` +
+            `acc (ohne G)   x:${(e.acceleration?.x??'n/a')} y:${(e.acceleration?.y??'n/a')} z:${(e.acceleration?.z??'n/a')}\n` +
+            `acc (mit G)    x:${(e.accelerationIncludingGravity?.x??'n/a')} y:${(e.accelerationIncludingGravity?.y??'n/a')} z:${(e.accelerationIncludingGravity?.z??'n/a')}\n` +
+            `Interval:      ${e.interval?.toFixed(1) ?? '?'} ms\n` +
+            `Verarbeitet:   ax=${ax.toFixed(3)} ay=${ay.toFixed(3)} az=${az.toFixed(3)}`;
+    }
+
+    if (!measuring) return;
+
+    const now = performance.now();
+    if (!lastTime) { lastTime = now; return; }
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+    if (dt <= 0 || dt > 0.2) return;
+
+    // ── Hochpassfilter (entfernt Drift/Gravitation) ──
+    hpX = HP * (hpX + ax - lastAX);
+    hpY = HP * (hpY + ay - lastAY);
+    hpZ = HP * (hpZ + az - lastAZ);
+    lastAX = ax; lastAY = ay; lastAZ = az;
+
+    // ── Integration: Beschleunigung → Geschwindigkeit (mm/s) ──
+    vX = (vX + hpX * dt * 1000) * LEAK;
+    vY = (vY + hpY * dt * 1000) * LEAK;
+    vZ = (vZ + hpZ * dt * 1000) * LEAK;
+
+    const v = velMag(vX, vY, vZ);
+
+    if (v > maxVelocity) maxVelocity = v;
+    squaredSum += v * v;
+    sampleCount++;
+
+    history.push(v);
+    if (history.length > HIST) history.shift();
+
+    // Vollaufzeichnung (max 18000 Punkte ≈ 5 min bei ~60Hz)
+    if (recorded.length < 18000) {
+        recorded.push({
+            t: Date.now(),
+            v: +v.toFixed(3),
+            ax: +ax.toFixed(3),
+            ay: +ay.toFixed(3),
+            az: +az.toFixed(3)
+        });
+    }
+
+    updateUI(v);
+}
+
+// ═══════════════════════════════════════════════════
+// UI UPDATE
+// ═══════════════════════════════════════════════════
+function updateUI(v) {
+    const col = getColor(v);
+    document.getElementById('mainNum').textContent = v.toFixed(2);
+    document.getElementById('mainNum').style.color = col;
+    document.getElementById('curVal').textContent  = v.toFixed(2);
+    document.getElementById('maxVal').textContent  = maxVelocity.toFixed(2);
+    const rms = sampleCount > 0 ? Math.sqrt(squaredSum / sampleCount) : 0;
+    document.getElementById('rmsVal').textContent  = rms.toFixed(2);
+    highlightNorm(maxVelocity);
+    drawLive();
+}
+
+// ═══════════════════════════════════════════════════
+// LIVE CHART
+// ═══════════════════════════════════════════════════
+function drawLive() {
+    const W = liveC.width, H = liveC.height;
+    liveCtx.clearRect(0, 0, W, H);
+    liveCtx.fillStyle = '#0a0a15';
+    liveCtx.fillRect(0, 0, W, H);
+
+    // Grid
+    liveCtx.strokeStyle = '#1a1a2e';
+    liveCtx.lineWidth = 1;
+    for (let i=1;i<5;i++){
+        liveCtx.beginPath();
+        liveCtx.moveTo(i*W/5,0); liveCtx.lineTo(i*W/5,H); liveCtx.stroke();
+    }
+    for (let i=1;i<4;i++){
+        liveCtx.beginPath();
+        liveCtx.moveTo(0,i*H/4); liveCtx.lineTo(W,i*H/4); liveCtx.stroke();
+    }
+
+    if (history.length < 2) return;
+    const scaleV = Math.max(maxVelocity * 1.2, 1);
+
+    // Fläche füllen
+    const grad = liveCtx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'rgba(0,180,216,0.4)');
+    grad.addColorStop(1,'rgba(0,180,216,0.02)');
+    liveCtx.beginPath();
+    history.forEach((v,i) => {
+        const x = (i/(HIST-1))*W;
+        const y = H - (v/scaleV)*H*0.88;
+        i===0 ? liveCtx.moveTo(x,y) : liveCtx.lineTo(x,y);
+    });
+    const lx = ((history.length-1)/(HIST-1))*W;
+    liveCtx.lineTo(lx,H); liveCtx.lineTo(0,H); liveCtx.closePath();
+    liveCtx.fillStyle = grad; liveCtx.fill();
+
+    // Linie (farbcodiert)
+    for (let i=1;i<history.length;i++) {
+        const x0=((i-1)/(HIST-1))*W, y0=H-(history[i-1]/scaleV)*H*0.88;
+        const x1=(i/(HIST-1))*W,     y1=H-(history[i]/scaleV)*H*0.88;
+        liveCtx.beginPath();
+        liveCtx.moveTo(x0,y0); liveCtx.lineTo(x1,y1);
+        liveCtx.strokeStyle = getColor(history[i]);
+        liveCtx.lineWidth = 2; liveCtx.stroke();
+    }
+
+    // Skalen-Label
+    liveCtx.fillStyle='#555'; liveCtx.font=`${11*(window.devicePixelRatio||1)}px Arial`;
+    liveCtx.fillText(`Skala: ${scaleV.toFixed(1)} mm/s`, 6, 16*(window.devicePixelRatio||1));
+}
+
+// ═══════════════════════════════════════════════════
+// ERGEBNIS-CHART
+// ═══════════════════════════════════════════════════
+function drawResult() {
+    if (recorded.length < 2) return;
+    const W = resC.width, H = resC.height;
+    resCtx.clearRect(0, 0, W, H);
+    resCtx.fillStyle = '#0a0a15';
+    resCtx.fillRect(0, 0, W, H);
+
+    // Grid
+    resCtx.strokeStyle = '#1a1a2e'; resCtx.lineWidth = 1;
+    for(let i=1;i<5;i++){
+        resCtx.beginPath();resCtx.moveTo(i*W/5,0);resCtx.lineTo(i*W/5,H);resCtx.stroke();
+    }
+    for(let i=1;i<4;i++){
+        resCtx.beginPath();resCtx.moveTo(0,i*H/4);resCtx.lineTo(W,i*H/4);resCtx.stroke();
+    }
+
+    const scaleV = Math.max(maxVelocity * 1.2, 1);
+    const N = recorded.length;
+
+    // Fläche
+    const grad = resCtx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'rgba(79,195,247,0.35)');
+    grad.addColorStop(1,'rgba(79,195,247,0.02)');
+    resCtx.beginPath();
+    recorded.forEach((d,i) => {
+        const x = (i/(N-1))*W;
+        const y = H - (d.v/scaleV)*H*0.88;
+        i===0 ? resCtx.moveTo(x,y) : resCtx.lineTo(x,y);
+    });
+    resCtx.lineTo(W,H); resCtx.lineTo(0,H); resCtx.closePath();
+    resCtx.fillStyle = grad; resCtx.fill();
+
+    // Linie
+    for(let i=1;i<N;i++){
+        const x0=((i-1)/(N-1))*W, y0=H-(recorded[i-1].v/scaleV)*H*0.88;
+        const x1=(i/(N-1))*W,     y1=H-(recorded[i].v/scaleV)*H*0.88;
+        resCtx.beginPath();
+        resCtx.moveTo(x0,y0); resCtx.lineTo(x1,y1);
+        resCtx.strokeStyle = getColor(recorded[i].v);
+        resCtx.lineWidth = 1.5; resCtx.stroke();
+    }
+
+    // Skala
+    const dpr = window.devicePixelRatio||1;
+    resCtx.fillStyle='#555'; resCtx.font=`${11*dpr}px Arial`;
+    resCtx.fillText(`Skala: ${scaleV.toFixed(1)} mm/s`, 6, 16*dpr);
+
+    // Zeitachse
+    const dur = (recorded[N-1].t - recorded[0].t)/1000;
+    const ta = document.getElementById('resTimeAxis');
+    ta.innerHTML = '';
+    for(let i=0;i<=4;i++){
+        const s = (dur*i/4).toFixed(1);
+        const sp = document.createElement('span');
+        sp.textContent = s+'s';
+        ta.appendChild(sp);
+    }
+}
+
+// ═══════════════════════════════════════════════════
+// START / STOP
+// ═══════════════════════════════════════════════════
+function toggleMeasurement() {
+    measuring ? stopMeasurement() : startMeasurement();
+}
+
+function startMeasurement() {
+    measuring    = true;
+    lastTime     = null;
+    measureStart = Date.now();
+    motionEventCount = 0;
+    vX=vY=vZ=hpX=hpY=hpZ=lastAX=lastAY=lastAZ=0;
+
+    document.getElementById('startBtn').textContent = '⏹ Stop';
+    document.getElementById('startBtn').className   = 'btn btn-stop';
+    document.getElementById('resultsPanel').style.display = 'none';
+    document.getElementById('linkArea').style.display = 'none';
+    setStatus('🟢 Messung läuft …', 'running');
+    document.getElementById('debugPanel').textContent = 'Warte auf Events …';
+
+    window.addEventListener('devicemotion', handleMotion);
+
+    // Timer für Dauer-Anzeige
+    durationTimer = setInterval(() => {
+        document.getElementById('durBadge').textContent =
+            fmtTime(Date.now() - measureStart);
+    }, 500);
+
+    // Warnung falls nach 2s noch keine Events
+    noDataTimer = setTimeout(() => {
+        if (motionEventCount === 0) {
+            setStatus('❌ Keine Sensor-Daten! Bitte Berechtigungen prüfen.','error');
+            document.getElementById('debugPanel').textContent =
+                'devicemotion Events: 0 nach 2 Sekunden!\n\n' +
+                'Mögliche Ursachen:\n' +
+                '• Chrome: Einstellungen → Website-Einstellungen\n  → Bewegungssensoren → Zulassen\n' +
+                '• Android: Schnell-Einstellungen → "Sensoren aus" deaktivieren\n' +
+                '• iOS: Zuerst "iOS Sensorerlaubnis" Button drücken\n' +
+                '• Samsung Internet oder Firefox probieren';
+        }
+    }, 2000);
+}
+
+function stopMeasurement() {
+    measuring = false;
+    clearInterval(durationTimer);
+    clearTimeout(noDataTimer);
+    window.removeEventListener('devicemotion', handleMotion);
+
+    document.getElementById('startBtn').textContent = '▶ Start';
+    document.getElementById('startBtn').className   = 'btn btn-primary';
+    setStatus('✅ Messung abgeschlossen','done');
+
+    if (recorded.length > 0) showResults();
+}
+
+// ═══════════════════════════════════════════════════
+// ERGEBNISSE ANZEIGEN
+// ═══════════════════════════════════════════════════
+function showResults() {
+    const rms = sampleCount > 0 ? Math.sqrt(squaredSum/sampleCount) : 0;
+    const dur = recorded.length > 1
+        ? ((recorded[recorded.length-1].t - recorded[0].t)/1000).toFixed(1)
+        : 0;
+    const ts  = new Date(recorded[0].t).toLocaleString('de-DE');
+
+    document.getElementById('resMeta').textContent =
+        `${ts} · Dauer: ${dur} s · Achse: ${selectedAxis.toUpperCase()}`;
+    document.getElementById('resPeak').textContent = maxVelocity.toFixed(2);
+    document.getElementById('resRms').textContent  = rms.toFixed(2);
+    document.getElementById('resPts').textContent  = recorded.length;
+    document.getElementById('resNorm').textContent = normText(maxVelocity);
+    document.getElementById('resNorm').style.color = getColor(maxVelocity);
+
+    document.getElementById('resultsPanel').style.display = 'block';
+
+    // Chart nach kurzer Pause zeichnen (DOM muss sichtbar sein)
+    setTimeout(() => {
+        resizeCanvas(resC);
+        drawResult();
+    }, 100);
+
+    document.getElementById('resultsPanel').scrollIntoView({behavior:'smooth'});
+}
+
+// ═══════════════════════════════════════════════════
+// RESET
+// ═══════════════════════════════════════════════════
+function resetAll() {
+    if (measuring) stopMeasurement();
+    maxVelocity=0; squaredSum=0; sampleCount=0;
+    history=[]; recorded=[];
+    vX=vY=vZ=hpX=hpY=hpZ=lastAX=lastAY=lastAZ=0;
+    document.getElementById('mainNum').textContent = '0.00';
+    document.getElementById('mainNum').style.color = '#00e5ff';
+    document.getElementById('curVal').textContent  = '0.00';
+    document.getElementById('maxVal').textContent  = '0.00';
+    document.getElementById('rmsVal').textContent  = '0.00';
+    document.getElementById('durBadge').textContent = '00:00';
+    document.getElementById('resultsPanel').style.display = 'none';
+    document.getElementById('linkArea').style.display = 'none';
+    document.getElementById('debugPanel').textContent = 'Warte auf Sensor-Daten …';
+    ['n0','n1','n2','n3','n4'].forEach(id =>
+        document.getElementById(id).classList.remove('active-norm'));
+    setStatus('Bereit – Drücke Start');
+    drawLive();
+}
+
+// ═══════════════════════════════════════════════════
+// ACHSE
+// ═══════════════════════════════════════════════════
+function setAxis(axis, btn) {
+    selectedAxis = axis;
+    document.querySelectorAll('.axis-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    resetAll();
+}
+
+// ═══════════════════════════════════════════════════
+// CSV EXPORT
+// ═══════════════════════════════════════════════════
+function exportCSV() {
+    if (!recorded.length) { alert('Keine Messdaten vorhanden.'); return; }
+    const rms = sampleCount>0 ? Math.sqrt(squaredSum/sampleCount) : 0;
+    const ts0 = new Date(recorded[0].t).toLocaleString('de-DE');
+    const dur = ((recorded[recorded.length-1].t-recorded[0].t)/1000).toFixed(1);
+
+    let csv = '# Schwingungsmesser Export\n';
+    csv += `# Datum/Zeit: ${ts0}\n`;
+    csv += `# Dauer: ${dur} s\n`;
+    csv += `# Achse: ${selectedAxis}\n`;
+    csv += `# Peak: ${maxVelocity.toFixed(3)} mm/s\n`;
+    csv += `# RMS: ${rms.toFixed(3)} mm/s\n`;
+    csv += `# Datenpunkte: ${recorded.length}\n`;
+    csv += '#\n';
+    csv += 'Zeit_ms;Zeit_s;Geschwindigkeit_mm_s;Beschl_X_m_s2;Beschl_Y_m_s2;Beschl_Z_m_s2\n';
+
+    const t0 = recorded[0].t;
+    recorded.forEach(d => {
+        const ms = d.t - t0;
+        csv += `${ms};${(ms/1000).toFixed(3)};${d.v};${d.ax};${d.ay};${d.az}\n`;
+    });
+
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `schwingung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ═══════════════════════════════════════════════════
+// SHARE LINK
+// ═══════════════════════════════════════════════════
+function toB64Url(str) {
+    return btoa(unescape(encodeURIComponent(str)))
+        .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');
+}
+function fromB64Url(s) {
+    let b = s.replace(/-/g,'+').replace(/_/g,'/');
+    while(b.length%4) b+='=';
+    return decodeURIComponent(escape(atob(b)));
+}
+
+function generateShareLink() {
+    if (!recorded.length) { alert('Keine Messdaten vorhanden.'); return; }
+
+    // Max. 600 Punkte (URL-Länge begrenzen)
+    const MAX = 600;
+    const step = Math.max(1, Math.floor(recorded.length/MAX));
+    const pts  = [];
+    for(let i=0;i<recorded.length;i+=step) pts.push(+recorded[i].v.toFixed(2));
+
+    const rms = sampleCount>0 ? Math.sqrt(squaredSum/sampleCount) : 0;
+    const payload = {
+        v:    pts,
+        dt:   Math.round((recorded[recorded.length-1].t - recorded[0].t) / pts.length),
+        axis: selectedAxis,
+        t0:   recorded[0].t,
+        peak: +maxVelocity.toFixed(3),
+        rms:  +rms.toFixed(3)
+    };
+
+    const base    = window.location.href.split('#')[0];
+    const encoded = toB64Url(JSON.stringify(payload));
+    const link    = `${base}#d=${encoded}`;
+
+    document.getElementById('linkArea').style.display = 'block';
+    document.getElementById('linkBox').textContent = link;
+    document.getElementById('linkNote').textContent =
+        link.length > 8000
+            ? `⚠️ Link sehr lang (${link.length} Zeichen). Kürzere Messung für bessere Kompatibilität.`
+            : `✅ Link bereit (${link.length} Zeichen)`;
+}
+
+function copyLink() {
+    const txt = document.getElementById('linkBox').textContent;
+    navigator.clipboard?.writeText(txt).then(() => {
+        const btn = event.target;
+        btn.textContent = '✅ Kopiert!';
+        setTimeout(()=>btn.textContent='📋 Kopieren', 2000);
+    }).catch(() => {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = txt; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+}
+
+// ═══════════════════════════════════════════════════
+// LINK LADEN (beim Öffnen eines geteilten Links)
+// ═══════════════════════════════════════════════════
+function tryLoadFromHash() {
+    const m = location.hash.match(/#d=([A-Za-z0-9\-_]+)/);
+    if (!m) return false;
+    try {
+        const p = JSON.parse(fromB64Url(m[1]));
+        const t0 = p.t0 || Date.now();
+
+        // recorded aus komprimiertem Link rekonstruieren
+        recorded = p.v.map((v,i) => ({
+            t: t0 + i * (p.dt||33),
+            v, ax:0, ay:0, az:0
+        }));
+        maxVelocity = p.peak || Math.max(...p.v);
+        squaredSum  = p.v.reduce((s,v)=>s+v*v, 0);
+        sampleCount = p.v.length;
+        selectedAxis = p.axis || 'all';
+        history = p.v.slice(-HIST);
+
+        setStatus('📤 Geteilte Messung geladen','done');
+        showResults();
+        return true;
+    } catch(err) {
+        setStatus('❌ Link konnte nicht geladen werden','error');
+        return false;
+    }
+}
+
+// ═══════════════════════════════════════════════════
+// IOS PERMISSION
+// ═══════════════════════════════════════════════════
+if (typeof DeviceMotionEvent !== 'undefined' &&
+    typeof DeviceMotionEvent.requestPermission === 'function') {
+    document.getElementById('permBtn').style.display = 'inline-flex';
+}
+function requestPermission() {
+    DeviceMotionEvent.requestPermission().then(state => {
+        if (state === 'granted') {
+            document.getElementById('permBtn').style.display = 'none';
+            setStatus('✅ Sensorerlaubnis erteilt – Drücke Start');
+        } else {
+            setStatus('❌ Sensorerlaubnis verweigert – Einstellungen prüfen','error');
+        }
+    }).catch(err => setStatus('❌ Fehler: '+err.message,'error'));
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+if (!tryLoadFromHash()) {
+    drawLive();
+}
+</script>
+</body>
+</html>
