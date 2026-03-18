@@ -306,3 +306,246 @@ function drawResult(data) {
 
   dom.resAxis.innerHTML = '<span>Anfang</span><span>Ende</span>';
 }
+/* ══════════════════════════════════════════════
+   SENSOR
+══════════════════════════════════════════════ */
+function onMotion(e) {
+  motionEventCount++;
+  const a = (
+    e.acceleration &&
+    e.acceleration.x != null &&
+    e.acceleration.y != null &&
+    e.acceleration.z != null
+  ) ? e.acceleration : e.accelerationIncludingGravity;
+  if (!a) return;
+  rawX = Number(a.x) || 0;
+  rawY = Number(a.y) || 0;
+  rawZ = Number(a.z) || 0;
+}
+window.addEventListener('devicemotion', onMotion, { passive: true });
+
+/* ══════════════════════════════════════════════
+   RESET
+══════════════════════════════════════════════ */
+function resetState() {
+  running = false;
+  if (rafId)      { cancelAnimationFrame(rafId); rafId = null; }
+  if (durTimer)   { clearInterval(durTimer);      durTimer = null; }
+  if (noDataTimer){ clearTimeout(noDataTimer);    noDataTimer = null; }
+
+  startTime = null; evtCount = 0; peakTotal = 0;
+  rmsAcc = 0; rmsCnt = 0; motionEventCount = 0;
+
+  buf.ptr = 0; buf.len = 0;
+  buf.x.fill(0); buf.y.fill(0); buf.z.fill(0); buf.t.fill(0);
+
+  intg.vx = intg.vy = intg.vz = 0;
+  intg.px = intg.py = intg.pz = 0;
+  intg.prev = null;
+
+  hp.x = hp.y = hp.z = 0;
+  hp.px = hp.py = hp.pz = 0;
+  rawX = rawY = rawZ = 0;
+
+  rec = null; savedData = null;
+
+  dom.startBtn.textContent = 'Start';
+  dom.startBtn.classList.add('btn--accent');
+  dom.startBtn.classList.remove('btn--stop');
+
+  dom.mainNum.textContent    = '0.00';
+  dom.mainSub.textContent    = `${unitLabel()} (Total)`;
+  dom.xVal.textContent       = '0.00';
+  dom.yVal.textContent       = '0.00';
+  dom.zVal.textContent       = '0.00';
+  dom.tVal.textContent       = '0.00';
+  dom.peakVal.textContent    = '0.00';
+  dom.rmsVal.textContent     = '0.00';
+  dom.evtVal.textContent     = '0';
+  dom.durVal.textContent     = '00:00';
+  dom.results.hidden         = true;
+  dom.resMeta.textContent    = '—';
+  dom.debugPanel.textContent = 'Warte auf Sensor-Daten …';
+
+  document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
+  dinRows.forEach(id => $(id).classList.remove('is-active'));
+  setStatus('', '');
+  drawLive();
+}
+
+/* ══════════════════════════════════════════════
+   START
+══════════════════════════════════════════════ */
+function startMeasurement() {
+  if (running) return;
+  resetState();
+
+  running          = true;
+  startTime        = Date.now();
+  motionEventCount = 0;
+
+  document.querySelectorAll('.unitBtn').forEach(b => b.disabled = true);
+
+  rec = {
+    unit: activeUnit,
+    t0: performance.now(),
+    startTs: startTime,
+    x: [], y: [], z: [], t: [], velTotal: []
+  };
+
+  dom.startBtn.textContent = 'Stop';
+  dom.startBtn.classList.remove('btn--accent');
+  dom.startBtn.classList.add('btn--stop');
+  setStatus('MESSUNG LÄUFT …', 'is-running');
+
+  durTimer = setInterval(() => {
+    dom.durVal.textContent = fmtTime(Date.now() - startTime);
+  }, 250);
+
+  noDataTimer = setTimeout(() => {
+    if (motionEventCount === 0)
+      setStatus('Kein Sensor! Prüfe Berechtigungen / Browser.', 'is-error');
+  }, 2000);
+
+  rafId = requestAnimationFrame(loop);
+}
+
+/* ══════════════════════════════════════════════
+   STOP
+══════════════════════════════════════════════ */
+function stopMeasurement() {
+  if (!running) return;
+  running = false;
+
+  if (rafId)      { cancelAnimationFrame(rafId); rafId = null; }
+  if (durTimer)   { clearInterval(durTimer);      durTimer = null; }
+  if (noDataTimer){ clearTimeout(noDataTimer);    noDataTimer = null; }
+
+  document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
+
+  dom.startBtn.textContent = 'Start';
+  dom.startBtn.classList.add('btn--accent');
+  dom.startBtn.classList.remove('btn--stop');
+  setStatus('Messung abgeschlossen ✓', 'is-done');
+
+  if (rec && rec.t.length > 5) {
+    savedData = {
+      unit: rec.unit,
+      startTs: rec.startTs,
+      durationSec: (performance.now() - rec.t0) / 1000,
+      x: rec.x.slice(), y: rec.y.slice(),
+      z: rec.z.slice(), t: rec.t.slice()
+    };
+    dom.results.hidden      = false;
+    dom.resMeta.textContent =
+      `${new Date(savedData.startTs).toLocaleString('de-DE')} · ` +
+      `Dauer: ${savedData.durationSec.toFixed(1)} s · ` +
+      `Punkte: ${savedData.t.length}`;
+    setTimeout(() => { resizeCanvas(dom.resultChart); drawResult(savedData); }, 80);
+  }
+  rec = null;
+}
+
+dom.startBtn.addEventListener('click', () => running ? stopMeasurement() : startMeasurement());
+dom.resetBtn.addEventListener('click', () => resetState());
+
+/* ══════════════════════════════════════════════
+   LOOP
+══════════════════════════════════════════════ */
+function loop() {
+  if (!running) return;
+  rafId = requestAnimationFrame(loop);
+
+  const now = performance.now();
+  const dt  = Math.min((now - (intg.prev ?? now)) / 1000, 0.05);
+  intg.prev = now;
+
+  processIMU(rawX, rawY, rawZ, dt);
+  const { vx, vy, vz, vt } = getValues();
+  const u = unitLabel();
+
+  buf.x[buf.ptr] = vx; buf.y[buf.ptr] = vy;
+  buf.z[buf.ptr] = vz; buf.t[buf.ptr] = vt;
+  buf.ptr = (buf.ptr + 1) % WINDOW_LEN;
+  if (buf.len < WINDOW_LEN) buf.len++;
+
+  const velTotal = Math.sqrt(
+    intg.vx*intg.vx + intg.vy*intg.vy + intg.vz*intg.vz) * 1000;
+  if (velTotal > peakTotal) peakTotal = velTotal;
+  rmsAcc += velTotal * velTotal; rmsCnt++;
+  if (velTotal > EVT_THR) evtCount++;
+
+  dom.xVal.textContent    = vx.toFixed(2);
+  dom.yVal.textContent    = vy.toFixed(2);
+  dom.zVal.textContent    = vz.toFixed(2);
+  dom.tVal.textContent    = vt.toFixed(2);
+  dom.peakVal.textContent = peakTotal.toFixed(2);
+  dom.rmsVal.textContent  = rmsCnt ? Math.sqrt(rmsAcc / rmsCnt).toFixed(2) : '0.00';
+  dom.evtVal.textContent  = evtCount;
+
+  let main = vt, sub = `${u} (Total)`;
+  if (!vis.t) {
+    const cand = [];
+    if (vis.x) cand.push({ k:'X', v:Math.abs(vx) });
+    if (vis.y) cand.push({ k:'Y', v:Math.abs(vy) });
+    if (vis.z) cand.push({ k:'Z', v:Math.abs(vz) });
+    if (cand.length) {
+      cand.sort((a,b) => b.v - a.v);
+      main = cand[0].v; sub = `${u} (${cand[0].k})`;
+    } else { main = 0; sub = `${u} (–)`; }
+  }
+  dom.mainNum.textContent = main.toFixed(2);
+  dom.mainSub.textContent = sub;
+
+  if (activeUnit === 'vel') updateDIN(velTotal);
+  drawLive();
+
+  dom.debugPanel.textContent =
+    `raw ax=${rawX.toFixed(3)} ay=${rawY.toFixed(3)} az=${rawZ.toFixed(3)} m/s²\n` +
+    `hp  ax=${hp.x.toFixed(3)} ay=${hp.y.toFixed(3)} az=${hp.z.toFixed(3)} m/s²\n` +
+    `vel x=${(intg.vx*1000).toFixed(2)} y=${(intg.vy*1000).toFixed(2)} z=${(intg.vz*1000).toFixed(2)} mm/s\n` +
+    `velTotal=${velTotal.toFixed(2)} mm/s | Peak=${peakTotal.toFixed(2)} mm/s\n` +
+    `Events=${evtCount} | dt=${(dt*1000).toFixed(1)} ms | unit=${activeUnit}`;
+
+  if (rec && rec.t.length < MAX_REC) {
+    rec.x.push(vx); rec.y.push(vy);
+    rec.z.push(vz); rec.t.push(vt);
+    rec.velTotal.push(velTotal);
+  }
+}
+
+/* ══════════════════════════════════════════════
+   CSV EXPORT
+══════════════════════════════════════════════ */
+function exportCSV() {
+  if (!savedData) return;
+  const u  = savedData.unit === 'vel' ? 'mm/s' : savedData.unit === 'acc' ? 'm/s²' : 'mm';
+  const n  = savedData.t.length;
+  const dt = savedData.durationSec / Math.max(1, n - 1);
+
+  let csv = `# HTB Schwingungsmesser Export\n`;
+  csv += `# Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}\n`;
+  csv += `# Dauer: ${savedData.durationSec.toFixed(2)} s\n`;
+  csv += `# Einheit: ${u}\n#\n`;
+  csv += `i;time_s;x_${u};y_${u};z_${u};total_${u}\n`;
+
+  for (let i = 0; i < n; i++) {
+    csv += `${i};${(i*dt).toFixed(4)};` +
+           `${savedData.x[i].toFixed(6)};${savedData.y[i].toFixed(6)};` +
+           `${savedData.z[i].toFixed(6)};${savedData.t[i].toFixed(6)}\n`;
+  }
+
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `HTB_Messung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+$('csvBtn').addEventListener('click', exportCSV);
+
+/* ══════════════════════════════════════════════
+   PDF EXPORT (3 Plots, wissenschaftlich, A4)
+══════════════════════════════════════════════ */
+function plotToDataURL({ series, title, unit, color, durationSec }) {
