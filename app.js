@@ -285,6 +285,7 @@ function drawResult(data) {
 }
 /* ─── SENSOR EVENT ───────────────────────────── */
 function onMotion(e) {
+motionEventCount++;
   const a = (e.acceleration && (e.acceleration.x != null || e.acceleration.y != null || e.acceleration.z != null))
     ? e.acceleration
     : e.accelerationIncludingGravity;
