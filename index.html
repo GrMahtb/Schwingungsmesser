@@ -1,4 +1,948 @@
 <!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+  <meta name="theme-color" content="#111111"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+  <meta name="apple-mobile-web-app-title" content="HTB Vibro"/>
+  <title>HTB Schwingungsmesser</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json"/>
+
+  <!-- PDF (lokal ins Repo legen!) -->
+  <script src="jspdf.umd.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#111111;
+      --card:#1a1a1a;
+      --card2:#222222;
+      --border:#2e2e2e;
+      --accent:#FFE600;
+      --accent-dim:#ccb800;
+      --text:#f0f0f0;
+      --muted:#777;
+
+      --red:#ff4444;
+      --green:#00cc66;
+      --blue:#4499ff;
+
+      --radius:14px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      background:var(--bg);color:var(--text);
+      font-family:'Segoe UI',Arial,sans-serif;
+      min-height:100vh;padding:14px;
+      max-width:720px;margin:0 auto;
+    }
+
+    /* Header */
+    .htb-header{
+      display:flex;align-items:center;gap:14px;
+      padding:14px 16px;margin-bottom:14px;
+      background:var(--card);border-radius:var(--radius);
+      border:1px solid var(--border);
+      border-left:4px solid var(--accent);
+    }
+    .htb-logo svg{width:56px;height:56px;}
+    .htb-title h1{font-size:1.25em;color:var(--accent);font-weight:900;letter-spacing:.4px;}
+    .htb-title p{font-size:.75em;color:var(--muted);margin-top:2px;line-height:1.35;}
+
+    /* Install Banner */
+    #installBanner{
+      display:none;
+      background:#1a1a00;border:1px solid var(--accent);
+      border-radius:var(--radius);padding:10px 14px;
+      margin-bottom:12px;
+      align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    }
+    #installBanner span{font-size:.82em;color:var(--accent);}
+    #installBanner button{
+      padding:7px 14px;border-radius:20px;border:none;
+      background:var(--accent);color:#111;font-weight:800;
+      font-size:.8em;cursor:pointer;
+    }
+
+    /* Status */
+    .status-bar{
+      border-radius:10px;padding:9px 14px;font-size:.8em;
+      text-align:center;margin-bottom:12px;
+      border:1px solid var(--border);background:var(--card);
+      color:var(--muted);transition:all .3s;
+    }
+    .status-bar.running{color:#111;background:var(--accent);border-color:var(--accent);font-weight:900;}
+    .status-bar.done{color:var(--accent);border-color:var(--accent-dim);background:#1a1a00;}
+    .status-bar.error{color:#ff4444;border-color:#661111;background:#1a0000;}
+
+    /* Cards */
+    .card{
+      background:var(--card);border-radius:var(--radius);
+      padding:14px;margin-bottom:12px;
+      border:1px solid var(--border);
+    }
+    .card-title{
+      font-size:.72em;color:var(--accent);
+      text-transform:uppercase;letter-spacing:1px;
+      font-weight:800;margin-bottom:12px;
+      display:flex;align-items:center;gap:8px;
+    }
+    .card-title::before{
+      content:'';display:inline-block;
+      width:3px;height:14px;background:var(--accent);border-radius:2px;
+    }
+
+    /* Tabs (ohne Icons) */
+    .tabs{display:flex;gap:4px;margin-bottom:12px;background:var(--card2);border-radius:10px;padding:4px;}
+    .tab{
+      flex:1;text-align:center;padding:8px 4px;border-radius:8px;
+      font-size:.82em;font-weight:800;cursor:pointer;
+      border:none;background:transparent;color:var(--muted);transition:all .2s;
+    }
+    .tab.active{background:var(--accent);color:#111;}
+
+    /* Main value */
+    .main-value{
+      font-size:3.6em;font-weight:950;text-align:center;
+      color:var(--accent);font-variant-numeric:tabular-nums;
+      line-height:1;margin:8px 0 2px;
+      text-shadow:0 0 30px rgba(255,230,0,.25);
+    }
+    .main-sub{
+      text-align:center;
+      font-size:.78em;color:var(--muted);
+      margin-bottom:4px;
+    }
+
+    /* Stats */
+    .stats-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;margin:10px 0 0;
+    }
+    @media (max-width:520px){
+      .stats-grid{grid-template-columns:repeat(2,1fr);}
+    }
+    .stat-box{
+      background:var(--card2);border-radius:10px;padding:10px 6px;
+      text-align:center;border:1px solid var(--border);
+    }
+    .stat-label{font-size:.62em;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+    .stat-val{font-size:1.2em;font-weight:800;margin:3px 0 1px;font-variant-numeric:tabular-nums;}
+    .stat-unit{font-size:.55em;color:#444;}
+
+    .dur-row{text-align:center;margin-top:10px;}
+    .dur-badge{
+      display:inline-block;background:var(--card2);border:1px solid var(--border);
+      border-radius:20px;padding:3px 12px;font-size:.75em;color:var(--muted);
+      font-variant-numeric:tabular-nums;
+    }
+
+    /* Toggle UI */
+    .toggle{cursor:pointer; user-select:none;}
+    .off{opacity:.30; filter:grayscale(70%);}
+
+    /* Canvas */
+    canvas{
+      width:100%;background:#0a0a0a;border-radius:10px;
+      border:1px solid var(--border);display:block;
+    }
+    #liveChart{height:190px;}
+    #resultChart{height:220px;}
+    .time-axis{
+      display:flex;justify-content:space-between;
+      font-size:.62em;color:#444;padding:3px 4px;margin-top:4px;
+    }
+
+    /* Legend buttons */
+    .legend{
+      display:flex;gap:10px;flex-wrap:wrap;justify-content:center;
+      margin-top:10px;
+    }
+    .legend-btn{
+      display:inline-flex;align-items:center;gap:6px;
+      background:transparent;border:1px solid var(--border);
+      padding:6px 10px;border-radius:999px;
+      color:var(--muted);cursor:pointer;font-weight:900;font-size:.78em;
+    }
+    .legend-btn.off{ text-decoration:line-through; }
+    .swatch{width:16px;height:3px;border-radius:2px;display:inline-block;}
+
+    /* Buttons */
+    .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:8px 0;}
+    .btn{
+      padding:12px 20px;border-radius:28px;border:none;
+      font-size:.9em;font-weight:900;cursor:pointer;
+      transition:all .2s;display:inline-flex;align-items:center;gap:7px;
+    }
+    .btn:active{opacity:.85;transform:scale(.97);}
+    .btn-primary{background:var(--accent);color:#111;}
+    .btn-stop{background:#cc0000;color:#fff;}
+    .btn-secondary{background:var(--card2);color:var(--muted);border:1px solid var(--border);}
+    .btn-csv{background:#1a3320;color:#00cc66;border:1px solid #1a4425;}
+    .btn-pdf{background:#2a2a2a;color:#ddd;border:1px solid var(--border);}
+    .btn-share{background:#1a0a33;color:#aa66ff;border:1px solid #2a1155;}
+    .btn-ios{background:#cc8800;color:#111;font-weight:900;display:none;}
+
+    /* Norm table */
+    .norm-table{width:100%;border-collapse:collapse;font-size:.78em;}
+    .norm-table td{padding:7px 4px;border-bottom:1px solid #222;vertical-align:middle;}
+    .norm-table tr:last-child td{border-bottom:none;}
+    .norm-table tr.active-norm td{background:rgba(255,230,0,.08);}
+    .norm-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle;}
+    .norm-range{font-weight:900;color:var(--text);}
+    .norm-desc{color:var(--muted);text-align:right;}
+
+    /* Results */
+    #resultsPanel{display:none;}
+    .section-sep{border:none;border-top:2px solid var(--accent);opacity:.25;margin:18px 0;}
+
+    /* Link box */
+    .link-box{
+      background:var(--card2);border:1px solid var(--border);border-radius:8px;
+      padding:10px;font-size:.7em;color:var(--muted);word-break:break-all;
+      max-height:90px;overflow-y:auto;font-family:monospace;
+      margin-top:8px;line-height:1.5;
+    }
+    .link-note{font-size:.67em;color:#cc8800;text-align:center;margin-top:6px;}
+
+    /* Debug */
+    #debugPanel{
+      background:#0a0a0a;border:1px solid var(--border);border-radius:8px;
+      padding:10px;font-size:.7em;font-family:monospace;color:#666;
+      white-space:pre-wrap;line-height:1.6;
+    }
+
+    /* Info / Install text */
+    .text-block{font-size:.82em;color:var(--muted);line-height:1.85;}
+    .text-block b{color:var(--accent);}
+
+    .footer{
+      text-align:center;font-size:.62em;color:#333;
+      margin-top:16px;padding-bottom:28px;line-height:1.7;
+    }
+    .footer span{color:var(--accent);}
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="htb-header">
+    <div class="htb-logo">
+      <!-- Inline HTB-Logo -->
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-label="HTB Logo">
+        <defs>
+          <clipPath id="diam">
+            <polygon points="100,8 192,100 100,192 8,100"/>
+          </clipPath>
+        </defs>
+        <polygon points="100,8 192,100 100,192 8,100" fill="#111111"
+                 stroke="#FFE600" stroke-width="2"/>
+        <rect x="18" y="66" width="164" height="22" rx="11" fill="white" clip-path="url(#diam)"/>
+        <rect x="18" y="112" width="164" height="22" rx="11" fill="white" clip-path="url(#diam)"/>
+        <text x="100" y="101" text-anchor="middle" dominant-baseline="middle"
+              font-family="'Arial Black',Arial,sans-serif" font-weight="900"
+              font-size="44" fill="#FFE600" letter-spacing="1">HTB</text>
+      </svg>
+    </div>
+    <div class="htb-title">
+      <h1>HTB Schwingungsmesser</h1>
+      <p>Schwinggeschwindigkeit (mm/s) · X/Y/Z/Total umschaltbar · Live: 10 s</p>
+    </div>
+  </div>
+
+  <!-- Install banner -->
+  <div id="installBanner">
+    <span>Als App installieren (PWA)</span>
+    <button onclick="installPWA()">Installieren</button>
+  </div>
+
+  <div class="status-bar" id="statusBar">Bereit – Drücke Start</div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" id="tab-messen"  onclick="showTab('messen')">Messen</button>
+    <button class="tab"        id="tab-info"    onclick="showTab('info')">Achsen</button>
+    <button class="tab"        id="tab-install" onclick="showTab('install')">App</button>
+  </div>
+
+  <!-- Pane: Messen -->
+  <div id="pane-messen">
+
+    <div class="card">
+      <div class="card-title">Anzeige</div>
+      <div class="main-value"><span id="mainNum">0.00</span></div>
+      <div class="main-sub" id="mainSub">mm/s (Total)</div>
+
+      <div class="stats-grid">
+        <div class="stat-box toggle" data-series="vx" onclick="toggleSeries('vx')">
+          <div class="stat-label">X</div>
+          <div class="stat-val" id="vxVal" style="color:var(--red)">0.00</div>
+          <div class="stat-unit">mm/s</div>
+        </div>
+        <div class="stat-box toggle" data-series="vy" onclick="toggleSeries('vy')">
+          <div class="stat-label">Y</div>
+          <div class="stat-val" id="vyVal" style="color:var(--green)">0.00</div>
+          <div class="stat-unit">mm/s</div>
+        </div>
+        <div class="stat-box toggle" data-series="vz" onclick="toggleSeries('vz')">
+          <div class="stat-label">Z</div>
+          <div class="stat-val" id="vzVal" style="color:var(--blue)">0.00</div>
+          <div class="stat-unit">mm/s</div>
+        </div>
+
+        <div class="stat-box toggle" data-series="vt" onclick="toggleSeries('vt')">
+          <div class="stat-label">Total</div>
+          <div class="stat-val" id="vtVal" style="color:var(--accent)">0.00</div>
+          <div class="stat-unit">mm/s</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-label">Peak Total</div>
+          <div class="stat-val" id="peakVal" style="color:var(--accent)">0.00</div>
+          <div class="stat-unit">mm/s</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">RMS Total</div>
+          <div class="stat-val" id="rmsVal" style="color:#aaa">0.00</div>
+          <div class="stat-unit">mm/s</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Events</div>
+          <div class="stat-val" id="evtVal" style="color:#555">0</div>
+          <div class="stat-unit">#</div>
+        </div>
+      </div>
+
+      <div class="dur-row">
+        <span style="font-size:.72em;color:var(--muted)">Dauer: </span>
+        <span class="dur-badge" id="durBadge">00:00</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Live-Verlauf (letzte 10 Sekunden)</div>
+      <canvas id="liveChart"></canvas>
+      <div class="time-axis" id="liveAxis"></div>
+
+      <div class="legend">
+        <button class="legend-btn" data-series="vx" onclick="toggleSeries('vx')">
+          <span class="swatch" style="background:var(--red)"></span> X
+        </button>
+        <button class="legend-btn" data-series="vy" onclick="toggleSeries('vy')">
+          <span class="swatch" style="background:var(--green)"></span> Y
+        </button>
+        <button class="legend-btn" data-series="vz" onclick="toggleSeries('vz')">
+          <span class="swatch" style="background:var(--blue)"></span> Z
+        </button>
+        <button class="legend-btn" data-series="vt" onclick="toggleSeries('vt')">
+          <span class="swatch" style="background:var(--accent)"></span> Total
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Steuerung</div>
+      <div class="btn-row">
+        <button class="btn btn-ios" id="permBtn" onclick="requestPermission()">iOS Sensorerlaubnis</button>
+        <button class="btn btn-primary" id="startBtn" onclick="toggleMeasurement()">Start</button>
+        <button class="btn btn-secondary" onclick="resetAll()">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Bewertung – DIN 4150-2 (Total)</div>
+      <table class="norm-table">
+        <tr id="n0"><td><span class="norm-dot" style="background:#00e676"></span><span class="norm-range">&lt; 0.3 mm/s</span></td><td class="norm-desc">Kaum wahrnehmbar</td></tr>
+        <tr id="n1"><td><span class="norm-dot" style="background:#aeea00"></span><span class="norm-range">0.3 – 1.0 mm/s</span></td><td class="norm-desc">Schwach wahrnehmbar</td></tr>
+        <tr id="n2"><td><span class="norm-dot" style="background:#ffd600"></span><span class="norm-range">1.0 – 3.0 mm/s</span></td><td class="norm-desc">Deutlich wahrnehmbar</td></tr>
+        <tr id="n3"><td><span class="norm-dot" style="background:#ff9800"></span><span class="norm-range">3.0 – 10 mm/s</span></td><td class="norm-desc">Stark – Gebäude prüfen</td></tr>
+        <tr id="n4"><td><span class="norm-dot" style="background:#ff1744"></span><span class="norm-range">&gt; 10 mm/s</span></td><td class="norm-desc">Schäden möglich</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Sensor-Debug</div>
+      <div id="debugPanel">Warte auf Sensor-Daten …</div>
+    </div>
+
+    <!-- Results -->
+    <div id="resultsPanel">
+      <hr class="section-sep"/>
+
+      <div style="text-align:center;margin-bottom:12px">
+        <div style="font-size:1.05em;color:var(--accent);font-weight:950;letter-spacing:.5px">
+          Letzte Messung
+        </div>
+        <div style="font-size:.75em;color:var(--muted);margin-top:4px" id="resMeta">—</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Diagramm (letzte Aufzeichnung)</div>
+        <canvas id="resultChart"></canvas>
+        <div class="time-axis" id="resAxis"></div>
+
+        <div class="legend">
+          <button class="legend-btn" data-series="vx" onclick="toggleSeries('vx')">
+            <span class="swatch" style="background:var(--red)"></span> X
+          </button>
+          <button class="legend-btn" data-series="vy" onclick="toggleSeries('vy')">
+            <span class="swatch" style="background:var(--green)"></span> Y
+          </button>
+          <button class="legend-btn" data-series="vz" onclick="toggleSeries('vz')">
+            <span class="swatch" style="background:var(--blue)"></span> Z
+          </button>
+          <button class="legend-btn" data-series="vt" onclick="toggleSeries('vt')">
+            <span class="swatch" style="background:var(--accent)"></span> Total
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Export</div>
+        <div class="btn-row">
+          <button class="btn btn-csv" onclick="exportCSV()">CSV</button>
+          <button class="btn btn-pdf" onclick="exportPDF()">PDF Diagramm</button>
+          <button class="btn btn-share" onclick="generateShareLink()">Link</button>
+          <button class="btn btn-secondary" onclick="resetAll()">Neue Messung</button>
+        </div>
+
+        <div id="linkArea" style="display:none">
+          <div class="link-box" id="linkBox"></div>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn btn-secondary" style="font-size:.82em" onclick="copyLink(this)">Kopieren</button>
+          </div>
+          <p class="link-note" id="linkNote"></p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pane-messen -->
+
+  <!-- Pane: Achsen -->
+  <div id="pane-info" style="display:none">
+    <div class="card">
+      <div class="card-title">Achsenausrichtung</div>
+      <div class="text-block">
+        <p><b>X</b> = links/rechts (seitlich)</p>
+        <p><b>Y</b> = Richtung Oberkante/Unterkante (längs)</p>
+        <p><b>Z</b> = senkrecht zum Display (aus dem Display heraus / hinein)</p>
+        <p style="margin-top:8px">
+          Tipp: Handy flach mit Display nach oben auflegen → <b>Z</b> ist dann die „Auf/Ab“-Richtung.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Messtipps</div>
+      <div class="text-block">
+        <p>Für stabile Werte Handy möglichst fest mit dem Messobjekt koppeln (nicht in der Hand halten).</p>
+        <p>RMS wird über die Messdauer gebildet – am besten 10–30 s messen.</p>
+        <p>Smartphone-Sensoren sind nicht kalibriert; Werte dienen als Orientierung.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pane: App -->
+  <div id="pane-install" style="display:none">
+    <div class="card">
+      <div class="card-title">Als App installieren (PWA)</div>
+      <div class="text-block">
+        <p><b>Android (Chrome):</b> Menü (⋮) → „App installieren“ oder „Zum Startbildschirm hinzufügen“</p>
+        <p><b>iPhone (Safari):</b> Teilen → „Zum Home-Bildschirm“</p>
+        <p style="margin-top:8px">Hinweis: PDF-Export benötigt die Datei <b>jspdf.umd.min.js</b> im Repo.</p>
+      </div>
+    </div>
+  </div>
+
+  <p class="footer">
+    <span>HTB Schwingungsmesser</span> · PWA<br>
+    Smartphone-Sensoren sind nicht werkskalibriert.
+  </p>
+
+<script>
+/* ========= Konfiguration ========= */
+const LIVE_WINDOW_MS = 10_000;
+const MAX_RECORDED_POINTS = 30_000;
+const HP = 0.97;
+const LEAK = 0.985;
+
+/* ========= Sichtbarkeit (Toggles) ========= */
+const visible = { vx:true, vy:true, vz:true, vt:true };
+
+/* ========= State ========= */
+let measuring=false, lastTime=null, measureStart=null;
+let durationTimer=null, noDataTimer=null, motionEventCount=0;
+
+let vX=0,vY=0,vZ=0, hpX=0,hpY=0,hpZ=0, lastAX=0,lastAY=0,lastAZ=0;
+let peakTotal=0, squaredSumTotal=0, sampleCount=0;
+
+let history=[];  // {t, vx, vy, vz, vt}
+let recorded=[]; // {t, vx, vy, vz, vt, ax, ay, az}
+
+/* ========= Canvas ========= */
+const liveC=document.getElementById('liveChart');
+const resC =document.getElementById('resultChart');
+const liveCtx=liveC.getContext('2d');
+const resCtx =resC.getContext('2d');
+
+function setupCanvas(c,ctx){
+  const dpr=window.devicePixelRatio||1;
+  const W=c.clientWidth, H=c.clientHeight;
+  c.width=Math.floor(W*dpr); c.height=Math.floor(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {W,H};
+}
+function resizeAll(){ setupCanvas(liveC,liveCtx); setupCanvas(resC,resCtx); drawLive(); drawResult(); }
+window.addEventListener('resize',resizeAll);
+setTimeout(resizeAll,60);
+
+/* ========= UI Helpers ========= */
+function setStatus(msg,cls=''){
+  const el=document.getElementById('statusBar');
+  el.textContent=msg; el.className='status-bar '+cls;
+}
+function fmtTime(ms){
+  const s=Math.floor(ms/1000),m=Math.floor(s/60);
+  return String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+}
+function getColorTotal(v){
+  return v<0.3?'#00e676':v<1?'#aeea00':v<3?'#ffd600':v<10?'#ff9800':'#ff1744';
+}
+function highlightNorm(v){
+  ['n0','n1','n2','n3','n4'].forEach(id=>document.getElementById(id).classList.remove('active-norm'));
+  document.getElementById('n'+(v<0.3?0:v<1?1:v<3?2:v<10?3:4)).classList.add('active-norm');
+}
+
+/* ========= Tabs ========= */
+function showTab(name){
+  ['messen','info','install'].forEach(t=>{
+    document.getElementById('pane-'+t).style.display = (t===name)?'block':'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===name);
+  });
+  if(name==='messen') setTimeout(resizeAll,60);
+}
+
+/* ========= Toggle Series ========= */
+function toggleSeries(key){
+  visible[key] = !visible[key];
+  document.querySelectorAll(`[data-series="${key}"]`).forEach(el=>{
+    el.classList.toggle('off', !visible[key]);
+  });
+  drawLive();
+  drawResult();
+}
+
+/* ========= Primary Anzeige (wenn Total ausgeblendet) ========= */
+function updateMainDisplay(vx,vy,vz,vt){
+  let label = 'mm/s (Total)';
+  let val = vt;
+
+  if (!visible.vt) {
+    // wenn Total aus, zeige Maximum der sichtbaren Achsen
+    const candidates = [];
+    if (visible.vx) candidates.push({k:'X', v:vx});
+    if (visible.vy) candidates.push({k:'Y', v:vy});
+    if (visible.vz) candidates.push({k:'Z', v:vz});
+
+    if (candidates.length) {
+      candidates.sort((a,b)=>b.v-a.v);
+      val = candidates[0].v;
+      label = `mm/s (Max sichtbar: ${candidates[0].k})`;
+    } else {
+      val = 0;
+      label = 'mm/s (keine Serie aktiv)';
+    }
+  }
+  const mainNum = document.getElementById('mainNum');
+  mainNum.textContent = val.toFixed(2);
+  mainNum.style.color = getColorTotal(val);
+  document.getElementById('mainSub').textContent = label;
+}
+
+/* ========= Sensor ========= */
+function handleMotion(e){
+  motionEventCount++;
+  document.getElementById('evtVal').textContent = motionEventCount;
+
+  // robuste Auslesung
+  let ax=0,ay=0,az=0;
+  if(e.accelerationIncludingGravity){
+    ax=Number(e.accelerationIncludingGravity.x)||0;
+    ay=Number(e.accelerationIncludingGravity.y)||0;
+    az=Number(e.accelerationIncludingGravity.z)||0;
+  }
+  if(e.acceleration&&(e.acceleration.x!=null||e.acceleration.y!=null||e.acceleration.z!=null)){
+    ax=Number(e.acceleration.x)||ax;
+    ay=Number(e.acceleration.y)||ay;
+    az=Number(e.acceleration.z)||az;
+  }
+
+  if(motionEventCount%10===0){
+    document.getElementById('debugPanel').textContent =
+      `Events: ${motionEventCount} | Interval: ${e.interval?.toFixed(1) ?? '?'} ms\n`+
+      `acc (ohne G) x:${(e.acceleration?.x ?? 'n/a')} y:${(e.acceleration?.y ?? 'n/a')} z:${(e.acceleration?.z ?? 'n/a')}\n`+
+      `acc (mit G)  x:${(e.accelerationIncludingGravity?.x ?? 'n/a')} y:${(e.accelerationIncludingGravity?.y ?? 'n/a')} z:${(e.accelerationIncludingGravity?.z ?? 'n/a')}\n`+
+      `used ax/ay/az: ${ax.toFixed(3)} / ${ay.toFixed(3)} / ${az.toFixed(3)} m/s²\n`+
+      `measuring: ${measuring}`;
+  }
+
+  if(!measuring) return;
+
+  const nowP = performance.now();
+  if(!lastTime){ lastTime = nowP; return; }
+  const dt = (nowP - lastTime)/1000;
+  lastTime = nowP;
+  if(dt<=0 || dt>0.2) return;
+
+  // Hochpass
+  hpX=HP*(hpX+ax-lastAX);
+  hpY=HP*(hpY+ay-lastAY);
+  hpZ=HP*(hpZ+az-lastAZ);
+  lastAX=ax; lastAY=ay; lastAZ=az;
+
+  // Integration -> mm/s
+  vX=(vX+hpX*dt*1000)*LEAK;
+  vY=(vY+hpY*dt*1000)*LEAK;
+  vZ=(vZ+hpZ*dt*1000)*LEAK;
+
+  const vx=Math.abs(vX), vy=Math.abs(vY), vz=Math.abs(vZ);
+  const vt=Math.sqrt(vX*vX + vY*vY + vZ*vZ);
+
+  // Stats (Total)
+  if(vt>peakTotal) peakTotal = vt;
+  squaredSumTotal += vt*vt;
+  sampleCount++;
+
+  const t = Date.now();
+  history.push({t,vx,vy,vz,vt});
+  while(history.length && history[0].t < t - LIVE_WINDOW_MS) history.shift();
+
+  if(recorded.length < MAX_RECORDED_POINTS){
+    recorded.push({
+      t,
+      vx:+vx.toFixed(3), vy:+vy.toFixed(3), vz:+vz.toFixed(3), vt:+vt.toFixed(3),
+      ax:+ax.toFixed(3), ay:+ay.toFixed(3), az:+az.toFixed(3)
+    });
+  }
+
+  updateUI(vx,vy,vz,vt);
+}
+
+/* ========= UI ========= */
+function updateUI(vx,vy,vz,vt){
+  document.getElementById('vxVal').textContent = vx.toFixed(2);
+  document.getElementById('vyVal').textContent = vy.toFixed(2);
+  document.getElementById('vzVal').textContent = vz.toFixed(2);
+  document.getElementById('vtVal').textContent = vt.toFixed(2);
+
+  document.getElementById('peakVal').textContent = peakTotal.toFixed(2);
+  const rms = sampleCount>0 ? Math.sqrt(squaredSumTotal/sampleCount) : 0;
+  document.getElementById('rmsVal').textContent = rms.toFixed(2);
+
+  updateMainDisplay(vx,vy,vz,vt);
+  highlightNorm(peakTotal);
+
+  drawLive();
+}
+
+/* ========= Zeichnen ========= */
+function drawGrid(ctx,W,H){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0a0a0a'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#1e1e1e'; ctx.lineWidth=1;
+  for(let i=1;i<5;i++){ ctx.beginPath(); ctx.moveTo(i*W/5,0); ctx.lineTo(i*W/5,H); ctx.stroke(); }
+  for(let i=1;i<4;i++){ ctx.beginPath(); ctx.moveTo(0,i*H/4); ctx.lineTo(W,i*H/4); ctx.stroke(); }
+}
+function drawSeries(ctx,pts,W,H,key,color,scale,t0,t1,thick=false){
+  if(pts.length<2) return;
+  ctx.strokeStyle=color;
+  ctx.lineWidth = thick ? 2.6 : 1.6;
+  ctx.beginPath();
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    const x=((p.t-t0)/(t1-t0))*W;
+    const y=H-(p[key]/scale)*H*0.88;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+
+function computeScaleFromVisible(points){
+  let mx=1;
+  for(const p of points){
+    if(visible.vx) mx=Math.max(mx,p.vx);
+    if(visible.vy) mx=Math.max(mx,p.vy);
+    if(visible.vz) mx=Math.max(mx,p.vz);
+    if(visible.vt) mx=Math.max(mx,p.vt);
+  }
+  return mx*1.15;
+}
+
+function drawLive(){
+  const {W,H}=setupCanvas(liveC,liveCtx);
+  drawGrid(liveCtx,W,H);
+  if(history.length<2) return;
+
+  const t1=Date.now(), t0=t1-LIVE_WINDOW_MS;
+  const scale = computeScaleFromVisible(history);
+
+  if(visible.vx) drawSeries(liveCtx,history,W,H,'vx','#ff4444',scale,t0,t1,false);
+  if(visible.vy) drawSeries(liveCtx,history,W,H,'vy','#00cc66',scale,t0,t1,false);
+  if(visible.vz) drawSeries(liveCtx,history,W,H,'vz','#4499ff',scale,t0,t1,false);
+  if(visible.vt) drawSeries(liveCtx,history,W,H,'vt','#FFE600',scale,t0,t1,true);
+
+  liveCtx.fillStyle='#444'; liveCtx.font='11px Arial';
+  liveCtx.fillText(`Skala: ${scale.toFixed(1)} mm/s`,8,14);
+
+  const ax=document.getElementById('liveAxis');
+  ax.innerHTML='';
+  for(let i=0;i<=5;i++){
+    const sp=document.createElement('span');
+    const sec=(-(LIVE_WINDOW_MS/1000)+(LIVE_WINDOW_MS/1000)*(i/5)).toFixed(0);
+    sp.textContent=sec==='0'?'jetzt':`${sec}s`;
+    ax.appendChild(sp);
+  }
+}
+
+function drawResult(){
+  if(!recorded.length) return;
+  const {W,H}=setupCanvas(resC,resCtx);
+  drawGrid(resCtx,W,H);
+  if(recorded.length<2) return;
+
+  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
+  const scale = computeScaleFromVisible(recorded);
+
+  if(visible.vx) drawSeries(resCtx,recorded,W,H,'vx','#ff4444',scale,t0,t1,false);
+  if(visible.vy) drawSeries(resCtx,recorded,W,H,'vy','#00cc66',scale,t0,t1,false);
+  if(visible.vz) drawSeries(resCtx,recorded,W,H,'vz','#4499ff',scale,t0,t1,false);
+  if(visible.vt) drawSeries(resCtx,recorded,W,H,'vt','#FFE600',scale,t0,t1,true);
+
+  resCtx.fillStyle='#444'; resCtx.font='11px Arial';
+  resCtx.fillText(`Skala: ${scale.toFixed(1)} mm/s`,8,14);
+
+  const durS=(t1-t0)/1000;
+  const ax=document.getElementById('resAxis');
+  ax.innerHTML='';
+  for(let i=0;i<=5;i++){
+    const sp=document.createElement('span');
+    sp.textContent=`${(durS*(i/5)).toFixed(1)}s`;
+    ax.appendChild(sp);
+  }
+}
+
+/* ========= Start/Stop/Reset ========= */
+function toggleMeasurement(){ measuring ? stopMeasurement() : startMeasurement(); }
+
+function startMeasurement(){
+  measuring=true; lastTime=null; measureStart=Date.now();
+  motionEventCount=0;
+
+  vX=vY=vZ=hpX=hpY=hpZ=lastAX=lastAY=lastAZ=0;
+  peakTotal=0; squaredSumTotal=0; sampleCount=0;
+  history=[]; recorded=[];
+
+  document.getElementById('evtVal').textContent='0';
+  document.getElementById('durBadge').textContent='00:00';
+  document.getElementById('resultsPanel').style.display='none';
+  document.getElementById('linkArea').style.display='none';
+
+  const startBtn=document.getElementById('startBtn');
+  startBtn.textContent='Stop';
+  startBtn.className='btn btn-stop';
+
+  setStatus('MESSUNG LÄUFT …','running');
+  document.getElementById('debugPanel').textContent='Warte auf Events …';
+
+  clearInterval(durationTimer);
+  durationTimer=setInterval(()=>{
+    document.getElementById('durBadge').textContent = fmtTime(Date.now()-measureStart);
+  },500);
+
+  clearTimeout(noDataTimer);
+  noDataTimer=setTimeout(()=>{
+    if(motionEventCount===0){
+      setStatus('Keine Sensor-Daten (devicemotion).','error');
+      document.getElementById('debugPanel').textContent =
+        'devicemotion Events: 0 nach 2 Sekunden.\n\n' +
+        'Bitte prüfen:\n' +
+        '- Chrome: Website-Einstellungen -> Bewegungssensoren -> Zulassen\n' +
+        '- Android: "Sensoren aus" deaktivieren (Quick Settings)\n' +
+        '- Energiesparmodus aus\n' +
+        '- Alternativ: Firefox / Samsung Internet testen';
+    }
+  },2000);
+}
+
+function stopMeasurement(){
+  measuring=false;
+  clearInterval(durationTimer);
+  clearTimeout(noDataTimer);
+
+  const startBtn=document.getElementById('startBtn');
+  startBtn.textContent='Start';
+  startBtn.className='btn btn-primary';
+
+  setStatus('Messung abgeschlossen','done');
+
+  if(recorded.length) showResults();
+}
+
+function resetAll(){
+  if(measuring) stopMeasurement();
+
+  peakTotal=0; squaredSumTotal=0; sampleCount=0;
+  history=[]; recorded=[];
+  vX=vY=vZ=hpX=hpY=hpZ=lastAX=lastAY=lastAZ=0;
+
+  ['vxVal','vyVal','vzVal','vtVal','peakVal','rmsVal'].forEach(id=>document.getElementById(id).textContent='0.00');
+  document.getElementById('evtVal').textContent='0';
+  document.getElementById('durBadge').textContent='00:00';
+
+  document.getElementById('mainNum').textContent='0.00';
+  document.getElementById('mainNum').style.color='#FFE600';
+  document.getElementById('mainSub').textContent='mm/s (Total)';
+
+  document.getElementById('resultsPanel').style.display='none';
+  document.getElementById('linkArea').style.display='none';
+  document.getElementById('debugPanel').textContent='Warte auf Sensor-Daten …';
+
+  ['n0','n1','n2','n3','n4'].forEach(id=>document.getElementById(id).classList.remove('active-norm'));
+  setStatus('Bereit – Drücke Start');
+
+  drawLive();
+}
+
+/* ========= Results ========= */
+function showResults(){
+  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
+  const dur=((t1-t0)/1000).toFixed(1);
+  const rms=sampleCount>0?Math.sqrt(squaredSumTotal/sampleCount):0;
+
+  document.getElementById('resMeta').textContent =
+    `${new Date(t0).toLocaleString('de-DE')} · Dauer: ${dur}s · Peak(Total): ${peakTotal.toFixed(2)} mm/s · RMS(Total): ${rms.toFixed(2)} mm/s · Punkte: ${recorded.length}`;
+
+  document.getElementById('resultsPanel').style.display='block';
+  setTimeout(()=>{ resizeAll(); drawResult(); },80);
+  document.getElementById('resultsPanel').scrollIntoView({behavior:'smooth'});
+}
+
+/* ========= CSV ========= */
+function exportCSV(){
+  if(!recorded.length){ alert('Keine Messdaten vorhanden.'); return; }
+
+  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
+  const dur=((t1-t0)/1000).toFixed(1);
+  const rms=sampleCount>0?Math.sqrt(squaredSumTotal/sampleCount):0;
+
+  let csv = '# HTB Schwingungsmesser – Export\n';
+  csv += `# Datum/Zeit: ${new Date(t0).toLocaleString('de-DE')}\n`;
+  csv += `# Dauer: ${dur} s\n`;
+  csv += `# Punkte: ${recorded.length}\n`;
+  csv += `# Peak Total: ${peakTotal.toFixed(3)} mm/s\n`;
+  csv += `# RMS Total: ${rms.toFixed(3)} mm/s\n`;
+  csv += '#\n';
+  csv += 'Zeit_ms;Zeit_s;Vx_mm_s;Vy_mm_s;Vz_mm_s;Vtotal_mm_s;Ax_m_s2;Ay_m_s2;Az_m_s2\n';
+
+  for(const d of recorded){
+    const ms=d.t-t0;
+    csv += `${ms};${(ms/1000).toFixed(3)};${d.vx};${d.vy};${d.vz};${d.vt};${d.ax};${d.ay};${d.az}\n`;
+  }
+
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`HTB_Schwingung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ========= PDF Diagramm ========= */
+function exportPDF(){
+  if(!recorded.length){ alert('Keine Messdaten vorhanden.'); return; }
+
+  if(!window.jspdf || !window.jspdf.jsPDF){
+    alert('jsPDF nicht geladen. Bitte "jspdf.umd.min.js" ins Repo legen (neben index.html).');
+    return;
+  }
+
+  // sicherstellen, dass Ergebnisdiagramm aktuell ist
+  drawResult();
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const margin = 40;
+
+  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
+  const dur=((t1-t0)/1000).toFixed(1);
+  const rms=sampleCount>0?Math.sqrt(squaredSumTotal/sampleCount):0;
+
+  // Hintergrund dunkel
+  pdf.setFillColor(17,17,17);
+  pdf.rect(0,0,pageW,pageH,'F');
+
+  pdf.setTextColor(255,230,0);
+  pdf.setFontSize(16);
+  pdf.text('HTB Schwingungsmesser – Diagramm', margin, 34);
+
+  pdf.setTextColor(210,210,210);
+  pdf.setFontSize(10);
+  pdf.text(`Start: ${new Date(t0).toLocaleString('de-DE')}   Dauer: ${dur}s`, margin, 54);
+  pdf.text(`Peak Total: ${peakTotal.toFixed(2)} mm/s   RMS Total: ${rms.toFixed(2)} mm/s`, margin, 68);
+
+  // Canvas als Bild
+  const img = resC.toDataURL('image/png', 1.0);
+
+  const x = margin;
+  const y = 90;
+  const w = pageW - 2*margin;
+  const h = pageH - y - margin;
+
+  pdf.addImage(img, 'PNG', x, y, w, h);
+  pdf.save(`HTB_Schwingung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.pdf`);
+}
+
+/* ========= Share Link (Downsample) ========= */
+function toB64Url(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,''); }
+function fromB64Url(s){ let b=s.replace(/-/g,'+').replace(/_/g,'/'); while(b.length%4)b+='='; return decodeURIComponent(escape(atob(b))); }
+
+function generateShareLink(){
+  if(!recorded.length){ alert('Keine Messdaten vorhanden.'); return; }
+
+  const MAX=250;
+  const step=Math.max(1,Math.floor(recorded.length/MAX));
+  const vx=[],vy=[],vz=[],vt=[];
+  for(let i=0;i<recorded.length;i+=step){
+    vx.push(+recorded[i].vx.toFixed(2));
+    vy.push(+recorded[i].vy.toFixed(2));
+    vz.push(+recorded[i].vz.toFixed(2));
+    vt.push(+recorded[i].vt.toFixed(2));
+  }
+
+  const t0=recorded[0].t, t1=recorded[recorded.length-1].t;
+  const rms=sampleCount>0?Math.sqrt(squaredSumTotal/sampleCount):0;
+  const payload={
+    t0,
+    dt: Math.round((t1-t0)/Math.max(1,vx.length-1)),
+    vx,vy,vz,vt,
+    peak:+peakTotal.toFixed(3),
+    rms:+rms.toFixed(3),
+    visible
+  };
+
+  const link = `${window.location.href.split('#')[0]}#d=${toB64Url(JSON.stringify(payload))}`;
+  document.getElementById('linkArea').style.display='block';
+  document.getElementById('linkBox').textContent=link;
+  document.getElementById('linkNote').textContent =
+    link.length>8000 ? `Link sehr lang (${link.length} Zeichen). Für Messenger besser CSV/PDF.` : `Link bereit (${link.length} Zeichen).`;
 }
 
 function copyLink(btn){
