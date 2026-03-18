@@ -287,6 +287,7 @@ canvas{
 }
 
 /* Buttons */
+.btn--stop{ background:#cc0000; color:#fff; }
 .buttons{
   display:flex;
   gap:10px;
