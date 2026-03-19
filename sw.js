@@ -1,4 +1,4 @@
-const CACHE = 'htb-vibro-v15';
+const CACHE = 'htb-vibro-v30';
 
 const ASSETS = [
   './',
@@ -25,7 +25,6 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Network-first
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
