@@ -427,6 +427,117 @@ function drawDinGuides(ctx, W, H, yMin, yMax, mode) {
 /* ═════════════════════════════════════════════=
    LIVE CHART
 ══════════════════════════════════════════════ */
+function liveTitleFor(mode, axisName) {
+  if (mode === 'acc')  return `Lineare Beschleunigung ${axisName}`;
+  if (mode === 'disp') return `Verschiebung ${axisName}`;
+  if (mode === 'freq') return `Frequenz ${axisName}`;
+  return `Geschwindigkeit ${axisName}`; // vel
+}
+
+function unitTextFor(mode) {
+  if (mode === 'acc')  return 'a (m/s²)';
+  if (mode === 'disp') return 's (mm)';
+  if (mode === 'freq') return 'f (Hz)';
+  return 'v (mm/s)';
+}
+
+function readBuf(arr, i) {
+  const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
+  return arr[idx];
+}
+
+function drawPanel({ ctx, x, y, w, h, seriesArr, color, title, mode }) {
+  // Rahmen + Hintergrund
+  ctx.save();
+  ctx.fillStyle = '#151516';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+
+  // Min/Max (pro Panel separat)
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < buf.len; i++) {
+    const v = readBuf(seriesArr, i);
+    if (v < mn) mn = v;
+    if (v > mx) mx = v;
+  }
+  if (!isFinite(mn)) { mn = -1; mx = 1; }
+  // Symmetrisch um 0 (wie Mess-Apps üblich)
+  const a = Math.max(Math.abs(mn), Math.abs(mx)) || 1;
+  const yMin = -a * 1.15;
+  const yMax =  a * 1.15;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.setLineDash([6, 8]);
+  ctx.lineWidth = 1;
+
+  // vertikale Gridlinien (6 Stück)
+  for (let i = 1; i < 6; i++) {
+    const gx = x + (i / 6) * w;
+    ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx, y + h); ctx.stroke();
+  }
+  // horizontale Gridlinien (4 Stück)
+  for (let j = 1; j < 4; j++) {
+    const gy = y + (j / 4) * h;
+    ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + w, gy); ctx.stroke();
+  }
+
+  // Null-Linie
+  ctx.setLineDash([]);
+  const y0 = y + h - ((0 - yMin) / (yMax - yMin)) * h;
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x + w, y0); ctx.stroke();
+
+  // DIN-Linien (unauffällig) nur in vel
+  if (mode === 'vel') {
+    ctx.save();
+    ctx.setLineDash([4, 6]);
+    ctx.strokeStyle = 'rgba(255,237,0,0.14)';
+    for (const g of DIN_GUIDES) {
+      const yg = y + h - ((g - yMin) / (yMax - yMin)) * h;
+      if (yg >= y && yg <= y + h) {
+        ctx.beginPath(); ctx.moveTo(x, yg); ctx.lineTo(x + w, yg); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  // Kurve
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (let i = 0; i < buf.len; i++) {
+    const v = readBuf(seriesArr, i);
+    const xp = x + (i / (WINDOW_LEN - 1)) * w;
+    const yp = y + h - ((v - yMin) / (yMax - yMin)) * h;
+    i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
+  }
+  ctx.stroke();
+
+  // Titel + Achsentexte
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.font = '14px system-ui, -apple-system, Segoe UI, Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, x + w / 2, y + 18);
+
+  // y-Achse Text links
+  ctx.save();
+  ctx.translate(x + 12, y + h / 2 + 30);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,0.70)';
+  ctx.font = '12px system-ui, -apple-system, Segoe UI, Arial';
+  ctx.fillText(unitTextFor(mode), 0, 0);
+  ctx.restore();
+
+  // x-Achse Text unten
+  ctx.textAlign = 'center';
+  ctx.fillText('t (s)', x + w / 2, y + h - 8);
+
+  ctx.restore();
+}
 function drawLive() {
   const cvs = dom.liveChart;
   const ctx = liveCtx;
