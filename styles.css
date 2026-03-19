@@ -23,47 +23,71 @@ body{
 /* ══════════════════════════════
    HEADER / BRAND
 ══════════════════════════════ */
+/* ===== Brand / Header neu ===== */
 .brand{
   border:1px solid var(--border);
   border-radius:0;
   margin-bottom:12px;
-  background:transparent;
   overflow:hidden;
 }
 
-/* Logo-Block: gelb, kein Padding, kein Rand, füllt alles */
-.brand__logo{
-  margin:0;
-  padding:0;
-  background:#ffed00;
-  line-height:0;   /* entfernt unerwünschten Whitespace unter SVG */
+/* durchgehender gelber Balken */
+.brand__bar{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:10px 14px;
+  background: var(--accent);     /* gelb durchgezogen */
 }
 
+/* Logo halb so groß: feste Höhe, links */
+.brand__logo{
+  flex:0 0 auto;
+  height:46px;                  /* HÖHE = "Logo-Höhe" */
+  width:auto;
+  line-height:0;
+  display:flex;
+  align-items:center;
+}
 .brand__logo svg{
-  width:100%;
-  height:auto;
+  height:46px;
+  width:auto;
   display:block;
 }
 
-/* Textbereich unter dem Logo */
-.brand__body{
-  background:linear-gradient(180deg,#171718,#141416);
-  padding:14px 16px 12px;
-  border-top:1px solid var(--border);
-  text-align:center;
+/* Text rechts neben Logo */
+.brand__text{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  min-width:0;
 }
 
+/* Schwarz auf Gelb */
 .brand__title{
-  font-weight:900;
-  color:var(--accent);
-  font-size:1.25em;
-  letter-spacing:.5px;
+  color:#111;
+  font-weight:950;
+  font-size:1.15em;
+  letter-spacing:.2px;
+  line-height:1.05;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.brand__subtitle{
+  margin-top:4px;
+  color:rgba(0,0,0,.65);
+  font-size:.78em;
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
-.brand__subtitle{
-  margin-top:6px;
-  font-size:.8em;
-  color:var(--muted);
+/* Mobile Feintuning */
+@media (max-width:420px){
+  .brand__logo, .brand__logo svg{ height:40px; }
+  .brand__title{ font-size:1.02em; }
 }
 
 /* ══════════════════════════════
