@@ -1,19 +1,58 @@
 'use strict';
 
 /* ══════════════════════════════════════════════
-   CONFIG
+   KONFIGURATION
 ══════════════════════════════════════════════ */
-const WINDOW_LEN  = 600;
+const WINDOW_LEN  = 600;       // 10 s @ ~60 Hz
 const MAX_REC     = 36000;
 const COLORS      = { x:'#32ff6a', y:'#4aa6ff', z:'#ffe95a', t:'#ffed00' };
 const FREQ_MIN_HZ = 1.0;
 const FREQ_MAX_HZ = 25.0;
 const GRAV_TAU_S  = 0.6;
 const DIN_GUIDES  = [0.3, 1.0, 3.0, 10.0];
-const EVT_THR     = 0.1;
+const EVT_THR     = 0.1;       // mm/s Event-Schwelle
 
 /* ══════════════════════════════════════════════
-   STATE
+   RING BUFFER HELPERS (4 parallele Verläufe)
+══════════════════════════════════════════════ */
+function makeRing() {
+  return {
+    x: new Float32Array(WINDOW_LEN),
+    y: new Float32Array(WINDOW_LEN),
+    z: new Float32Array(WINDOW_LEN),
+    t: new Float32Array(WINDOW_LEN),
+    ptr: 0, len: 0
+  };
+}
+
+function ringReset(r) {
+  r.ptr = 0; r.len = 0;
+  r.x.fill(0); r.y.fill(0); r.z.fill(0); r.t.fill(0);
+}
+
+function ringPush(r, x, y, z, t) {
+  r.x[r.ptr] = x; r.y[r.ptr] = y;
+  r.z[r.ptr] = z; r.t[r.ptr] = t;
+  r.ptr = (r.ptr + 1) % WINDOW_LEN;
+  if (r.len < WINDOW_LEN) r.len++;
+}
+
+function ringRead(r, arr, i) {
+  return arr[(r.ptr - r.len + i + WINDOW_LEN) % WINDOW_LEN];
+}
+
+// 4 parallele Ringe – alle werden immer beschrieben
+const rings = {
+  acc:  makeRing(),   // m/s²
+  vel:  makeRing(),   // mm/s
+  disp: makeRing(),   // mm
+  freq: makeRing()    // Hz
+};
+
+let liveRing = rings.vel; // welcher Ring wird angezeigt
+
+/* ══════════════════════════════════════════════
+   ZUSTAND
 ══════════════════════════════════════════════ */
 let running = false, startTime = null, durTimer = null, rafId = null;
 let savedData = null, rec = null;
@@ -26,19 +65,9 @@ let igX=0, igY=0, igZ=0;
 let accX=0, accY=0, accZ=0, hasAcc=false;
 let gyrX=0, gyrY=0, gyrZ=0;
 
-const buf = {
-  x: new Float32Array(WINDOW_LEN),
-  y: new Float32Array(WINDOW_LEN),
-  z: new Float32Array(WINDOW_LEN),
-  t: new Float32Array(WINDOW_LEN),
-  ptr: 0, len: 0
-};
-
 const sig = {
-  x: new Float32Array(256),
-  y: new Float32Array(256),
-  z: new Float32Array(256),
-  t: new Float32Array(256),
+  x: new Float32Array(256), y: new Float32Array(256),
+  z: new Float32Array(256), t: new Float32Array(256),
   ptr: 0, len: 0
 };
 
@@ -54,7 +83,7 @@ let peakTotal=0, rmsAcc=0, rmsCnt=0, evtCount=0;
 const vis = { x:true, y:true, z:true, t:true };
 
 /* ══════════════════════════════════════════════
-   iOS / PWA
+   iOS / PWA ERKENNUNG
 ══════════════════════════════════════════════ */
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent);
 const IS_STANDALONE =
@@ -120,7 +149,7 @@ function unitTextFor(mode) {
 }
 
 function liveTitleFor(mode, axis) {
-  if (mode === 'acc')  return `Lineare Beschleunigung ${axis}`;
+  if (mode === 'acc')  return `Beschleunigung ${axis}`;
   if (mode === 'disp') return `Verschiebung ${axis}`;
   if (mode === 'freq') return `Frequenz ${axis}`;
   return `Geschwindigkeit ${axis}`;
@@ -143,10 +172,6 @@ function setStatus(msg, cls) {
   dom.statusBar.textContent = msg;
   dom.statusBar.className   = 'statusBar' + (cls ? ' '+cls : '');
   dom.statusBar.hidden      = !msg;
-}
-
-function readBuf(arr, i) {
-  return arr[(buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN];
 }
 
 /* ══════════════════════════════════════════════
@@ -205,6 +230,9 @@ document.querySelectorAll('.unitBtn').forEach(btn => {
     document.querySelectorAll('.unitBtn').forEach(b =>
       b.classList.toggle('is-active', b === btn));
     updateUnitLabels();
+
+    // Nur Anzeige wechseln – Messung läuft unverändert weiter
+    liveRing = rings[activeUnit] || rings.vel;
     drawLive();
     if (savedData) drawResult(savedData);
   });
@@ -238,12 +266,12 @@ function updateDIN(vMms) {
 }
 
 /* ══════════════════════════════════════════════
-   FILTER
+   FILTER (Gravity + Bandpass)
 ══════════════════════════════════════════════ */
 function clampBand(fcMin, fcMax, fs) {
   const nyq = Math.max(1, fs / 2);
-  const hi = Math.min(fcMax, nyq * 0.85);
-  const lo = Math.max(0.2, Math.min(fcMin, hi * 0.8));
+  const hi  = Math.min(fcMax, nyq * 0.85);
+  const lo  = Math.max(0.2, Math.min(fcMin, hi * 0.8));
   return { lo, hi };
 }
 
@@ -253,19 +281,22 @@ function updateFs(dt) {
 }
 
 function filterLinearAcc(igAx, igAy, igAz, linAx, linAy, linAz, dt) {
+  // Gravity-Lowpass
   const aG = dt / (GRAV_TAU_S + dt);
   filt.gX += aG * (igAx - filt.gX);
   filt.gY += aG * (igAy - filt.gY);
   filt.gZ += aG * (igAz - filt.gZ);
 
+  // Lineare Beschleunigung
   let lx = hasAcc ? linAx : igAx - filt.gX;
   let ly = hasAcc ? linAy : igAy - filt.gY;
   let lz = hasAcc ? linAz : igAz - filt.gZ;
 
+  // Bandpass
   const { lo, hi } = clampBand(FREQ_MIN_HZ, FREQ_MAX_HZ, fsEst);
+
   const tauHP = 1 / (2 * Math.PI * lo);
   const aHP   = tauHP / (tauHP + dt);
-
   filt.hpX = aHP * (filt.hpX + lx - filt.prevX);
   filt.hpY = aHP * (filt.hpY + ly - filt.prevY);
   filt.hpZ = aHP * (filt.hpZ + lz - filt.prevZ);
@@ -281,7 +312,7 @@ function filterLinearAcc(igAx, igAy, igAz, linAx, linAy, linAz, dt) {
 }
 
 /* ══════════════════════════════════════════════
-   FREQUENZSCHÄTZUNG
+   FREQUENZSCHÄTZUNG (Autokorrelation)
 ══════════════════════════════════════════════ */
 function pushSig(ax, ay, az) {
   const t = Math.sqrt(ax*ax + ay*ay + az*az);
@@ -293,9 +324,8 @@ function pushSig(ax, ay, az) {
 
 function readSigSeries(arr) {
   const out = new Float32Array(sig.len);
-  for (let i = 0; i < sig.len; i++) {
+  for (let i = 0; i < sig.len; i++)
     out[i] = arr[(sig.ptr - sig.len + i + 256) % 256];
-  }
   return out;
 }
 
@@ -311,53 +341,46 @@ function dominantFreqAutocorr(series, fs, fmin, fmax) {
   let bestLag = 0, bestVal = -Infinity;
   for (let lag = minLag; lag <= maxLag; lag++) {
     let sum = 0;
-    for (let i = 0; i < n-lag; i++) {
+    for (let i = 0; i < n-lag; i++)
       sum += (series[i]-mean) * (series[i+lag]-mean);
-    }
     if (sum > bestVal) { bestVal = sum; bestLag = lag; }
   }
   return bestLag > 0 ? fs / bestLag : 0;
 }
 
 /* ══════════════════════════════════════════════
-   SINGLE PANEL (für Live-Chart)
+   EINZELNES PANEL ZEICHNEN
 ══════════════════════════════════════════════ */
-function drawPanel({ ctx, x, y, w, h, seriesArr, color, title, mode }) {
+function drawPanel({ ctx, x, y, w, h, ring, color, title, mode }) {
   ctx.save();
 
-  // Hintergrund
+  // Hintergrund + Rahmen
   ctx.fillStyle = '#111113';
   ctx.fillRect(x, y, w, h);
-
-  // Rahmen
   ctx.strokeStyle = 'rgba(255,255,255,0.45)';
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
   ctx.strokeRect(x, y, w, h);
 
-  // Min/Max symmetrisch um 0
+  // Min/Max symmetrisch
   let mx = 0;
-  for (let i = 0; i < buf.len; i++) {
-    const v = Math.abs(readBuf(seriesArr, i));
+  for (let i = 0; i < ring.len; i++) {
+    const v = Math.abs(ringRead(ring, ring.x, i));
     if (v > mx) mx = v;
   }
   if (mx === 0) mx = 1;
   const yMin = -mx * 1.2;
   const yMax =  mx * 1.2;
-
   const yOf = (v) => y + h - ((v - yMin) / (yMax - yMin)) * h;
 
   // Gitternetz
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-  ctx.lineWidth   = 1;
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth = 1;
   ctx.setLineDash([5, 7]);
-
-  // vertikal (5 Linien)
   for (let i = 1; i <= 4; i++) {
     const gx = x + (i/5)*w;
     ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx, y+h); ctx.stroke();
   }
-  // horizontal (4 Linien)
   for (let j = 1; j <= 3; j++) {
     const gy = y + (j/4)*h;
     ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x+w, gy); ctx.stroke();
@@ -383,62 +406,56 @@ function drawPanel({ ctx, x, y, w, h, seriesArr, color, title, mode }) {
   ctx.setLineDash([]);
   ctx.strokeStyle = 'rgba(255,255,255,0.20)';
   ctx.lineWidth = 1;
-  const yn = yOf(0);
-  ctx.beginPath(); ctx.moveTo(x, yn); ctx.lineTo(x+w, yn); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, yOf(0)); ctx.lineTo(x+w, yOf(0)); ctx.stroke();
 
   // Kurve
-  if (buf.len >= 2) {
+  if (ring.len >= 2) {
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    for (let i = 0; i < buf.len; i++) {
+    for (let i = 0; i < ring.len; i++) {
       const xp = x + (i / (WINDOW_LEN - 1)) * w;
-      const yp = yOf(readBuf(seriesArr, i));
+      const yp = yOf(ringRead(ring, ring.x, i));
       i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
     }
     ctx.stroke();
   }
 
-  // Y-Achse: Tick-Werte
+  // Y-Ticks
+  ctx.setLineDash([]);
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.font = '10px system-ui, Arial';
   ctx.textAlign = 'right';
-  const topVal =  mx;
-  const midVal =  mx / 2;
-  const ticks = [topVal, midVal, 0, -midVal, -topVal];
-  for (const v of ticks) {
+  for (const v of [mx, mx/2, 0, -mx/2, -mx]) {
     const yp = yOf(v);
-    if (yp > y+6 && yp < y+h-4) {
-      ctx.fillText(v.toFixed(v === 0 ? 0 : 2), x+36, yp+4);
-    }
+    if (yp > y+6 && yp < y+h-4)
+      ctx.fillText(v.toFixed(v === 0 ? 0 : 2), x+40, yp+4);
   }
 
-  // X-Achse: Ticks (0 .. 10 s)
+  // X-Ticks
   ctx.textAlign = 'center';
-  const timeLabels = [0, 2, 4, 6, 8, 10];
-  for (const t of timeLabels) {
-    const xp = x + (t/10) * w;
-    ctx.fillText(`${t}`, xp, y+h-4);
+  for (const t of [0,2,4,6,8,10]) {
+    ctx.fillText(`${t}`, x + (t/10)*w, y+h-4);
   }
 
-  // Titel (oben zentriert)
+  // Titel
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
   ctx.font = 'bold 13px system-ui, Arial';
   ctx.textAlign = 'center';
   ctx.fillText(title, x + w/2, y + 18);
 
-  // Y-Label (links, rotiert)
+  // Y-Label (rotiert)
   ctx.save();
   ctx.translate(x + 10, y + h/2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.60)';
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.font = '11px system-ui, Arial';
   ctx.textAlign = 'center';
   ctx.fillText(unitTextFor(mode), 0, 0);
   ctx.restore();
 
-  // X-Label (unten, rechts)
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  // X-Label
+  ctx.fillStyle = 'rgba(255,255,255,0.50)';
   ctx.font = '11px system-ui, Arial';
   ctx.textAlign = 'right';
   ctx.fillText('t (s)', x+w-4, y+h-4);
@@ -448,6 +465,7 @@ function drawPanel({ ctx, x, y, w, h, seriesArr, color, title, mode }) {
 
 /* ══════════════════════════════════════════════
    LIVE CHART — 3 PANELS (X / Y / Z)
+   Zeigt immer liveRing (= aktive Einheit)
 ══════════════════════════════════════════════ */
 function drawLive() {
   const cvs = dom.liveChart;
@@ -461,28 +479,37 @@ function drawLive() {
 
   const pad    = 12;
   const gap    = 14;
-  const left   = 44;           // Platz für Y-Label + Ticks links
+  const left   = 46;
   const panelH = (H - pad*2 - gap*2) / 3;
   const pw     = W - left - pad;
   const mode   = activeUnit;
+  const ring   = liveRing;
 
-  const lenBackup = buf.len;
-  if (buf.len < 2) buf.len = 2;
+  // Temporäres Ring-Objekt für jede Achse (zeigt nur eine Achse pro Panel)
+  function makeAxisRing(mainArr) {
+    return {
+      x: mainArr,
+      y: mainArr, z: mainArr, t: mainArr,
+      ptr: ring.ptr, len: ring.len
+    };
+  }
+
+  const ringX = { ...ring, x: ring.x };
+  const ringY = { ...ring, x: ring.y };
+  const ringZ = { ...ring, x: ring.z };
 
   drawPanel({ ctx, x:left, y: pad + 0*(panelH+gap), w:pw, h:panelH,
-    seriesArr:buf.x, color:COLORS.x, title:liveTitleFor(mode,'x'), mode });
+    ring: ringX, color: COLORS.x, title: liveTitleFor(mode,'x'), mode });
 
   drawPanel({ ctx, x:left, y: pad + 1*(panelH+gap), w:pw, h:panelH,
-    seriesArr:buf.y, color:COLORS.y, title:liveTitleFor(mode,'y'), mode });
+    ring: ringY, color: COLORS.y, title: liveTitleFor(mode,'y'), mode });
 
   drawPanel({ ctx, x:left, y: pad + 2*(panelH+gap), w:pw, h:panelH,
-    seriesArr:buf.z, color:COLORS.z, title:liveTitleFor(mode,'z'), mode });
-
-  buf.len = lenBackup;
+    ring: ringZ, color: COLORS.z, title: liveTitleFor(mode,'z'), mode });
 }
 
 /* ══════════════════════════════════════════════
-   RESULT CHART (wie bisher, einzeln)
+   RESULT CHART
 ══════════════════════════════════════════════ */
 function drawResult(data) {
   const cvs = dom.resultChart;
@@ -495,31 +522,29 @@ function drawResult(data) {
   ctx.fillRect(0,0,W,H);
 
   const unitMode = data.unit || activeUnit;
-
   let mn=Infinity, mx=-Infinity;
   ['x','y','z','t'].forEach(s => {
     data[s].forEach(v => { if(v<mn) mn=v; if(v>mx) mx=v; });
   });
   if (!isFinite(mn)) { mn=-1; mx=1; }
   const rng = (mx-mn)||1;
-  const yMin = mn - rng*0.12;
-  const yMax = mx + rng*0.12;
+  const yMin = mn - rng*0.12, yMax = mx + rng*0.12;
 
-  // DIN-Linien
   if (unitMode === 'vel') {
     ctx.save(); ctx.setLineDash([4,6]);
     ctx.strokeStyle = 'rgba(255,237,0,0.18)'; ctx.lineWidth = 1;
     for (const g of DIN_GUIDES) {
       const yg = H - ((g-yMin)/(yMax-yMin))*H;
-      if (yg>0 && yg<H) { ctx.beginPath(); ctx.moveTo(0,yg); ctx.lineTo(W,yg); ctx.stroke(); }
+      if (yg>0 && yg<H) {
+        ctx.beginPath(); ctx.moveTo(0,yg); ctx.lineTo(W,yg); ctx.stroke();
+      }
     }
     ctx.restore();
   }
 
-  // Null-Linie
   ctx.setLineDash([]);
-  ctx.strokeStyle = '#2a2a2d'; ctx.lineWidth = 1;
   const y0 = H - ((0-yMin)/(yMax-yMin))*H;
+  ctx.strokeStyle = '#2a2a2d'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0,y0); ctx.lineTo(W,y0); ctx.stroke();
 
   ['x','y','z','t'].forEach(s => {
@@ -534,7 +559,6 @@ function drawResult(data) {
     ctx.stroke();
   });
 
-  // Achsenbeschriftung
   const { ySymbol, yUnit } = axisMetaFromUnit(unitMode);
   ctx.fillStyle = 'rgba(255,255,255,0.50)';
   ctx.font = '11px system-ui, Arial';
@@ -555,6 +579,7 @@ function drawResult(data) {
 function onMotion(e) {
   motionEventCount++;
 
+  // accelerationIncludingGravity (immer)
   const ig = e.accelerationIncludingGravity;
   if (ig && ig.x != null) {
     igX = Number(ig.x) || 0;
@@ -562,6 +587,7 @@ function onMotion(e) {
     igZ = Number(ig.z) || 0;
   }
 
+  // linear acceleration (wenn verfügbar)
   const a = e.acceleration;
   if (a && a.x != null && a.y != null && a.z != null) {
     accX = Number(a.x) || 0;
@@ -572,6 +598,7 @@ function onMotion(e) {
     hasAcc = false;
   }
 
+  // gyro (optional)
   const r = e.rotationRate;
   if (r && r.alpha != null) {
     gyrX = Number(r.alpha) || 0;
@@ -579,7 +606,7 @@ function onMotion(e) {
     gyrZ = Number(r.gamma) || 0;
   }
 }
-window.addEventListener('devicemotion', onMotion, { passive:true });
+window.addEventListener('devicemotion', onMotion, { passive: true });
 
 /* ══════════════════════════════════════════════
    RESET / START / STOP
@@ -591,36 +618,49 @@ function resetState() {
   if (noDataTimer) { clearTimeout(noDataTimer); noDataTimer = null; }
 
   startTime = null;
-  evtCount = 0; peakTotal = 0;
-  rmsAcc = 0; rmsCnt = 0;
   motionEventCount = 0;
 
+  // stats
+  peakTotal = 0; rmsAcc = 0; rmsCnt = 0; evtCount = 0;
+
+  // sampling + freq
   fsEst = 60;
   lastFreqUpdate = 0;
   fX = fY = fZ = fT = 0;
 
-  buf.ptr = 0; buf.len = 0;
-  buf.x.fill(0); buf.y.fill(0); buf.z.fill(0); buf.t.fill(0);
+  // rings
+  ringReset(rings.acc);
+  ringReset(rings.vel);
+  ringReset(rings.disp);
+  ringReset(rings.freq);
+  liveRing = rings[activeUnit] || rings.vel;
 
+  // sig
   sig.ptr = 0; sig.len = 0;
   sig.x.fill(0); sig.y.fill(0); sig.z.fill(0); sig.t.fill(0);
 
+  // integrator
   intg.vx = intg.vy = intg.vz = 0;
   intg.px = intg.py = intg.pz = 0;
   intg.prev = null;
 
+  // filter
   filt.gX = filt.gY = filt.gZ = 0;
   filt.hpX = filt.hpY = filt.hpZ = 0;
   filt.prevX = filt.prevY = filt.prevZ = 0;
   filt.lpX = filt.lpY = filt.lpZ = 0;
 
+  // raw
   igX = igY = igZ = 0;
   accX = accY = accZ = 0;
   gyrX = gyrY = gyrZ = 0;
   hasAcc = false;
 
-  rec = null; savedData = null;
+  // measurement data
+  rec = null;
+  savedData = null;
 
+  // UI
   dom.startBtn.textContent = 'Start';
   dom.startBtn.classList.add('btn--accent');
   dom.startBtn.classList.remove('btn--stop');
@@ -639,35 +679,36 @@ function resetState() {
 
   dom.results.hidden = true;
   dom.resMeta.textContent = '—';
+
   dom.debugPanel.textContent = 'Warte auf Sensor-Daten …';
 
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
   dinRows.forEach(id => $(id).classList.remove('is-active'));
+
   setStatus('', '');
   drawLive();
 }
 
 function startMeasurement() {
   if (running) return;
-  resetState();
 
-  running          = true;
-  startTime        = Date.now();
+  // nicht die Unit zurücksetzen – wir messen parallel sowieso alles
+  running = true;
+  startTime = Date.now();
   motionEventCount = 0;
 
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = true);
 
+  // Recording enthält nur die aktuell gewählte Anzeige-Einheit beim STOP
   rec = {
-    unit: activeUnit,
     t0: performance.now(),
-    startTs: startTime,
-    x: [], y: [], z: [], t: [],
-    velTotal: []
+    startTs: startTime
   };
 
   dom.startBtn.textContent = 'Stop';
   dom.startBtn.classList.remove('btn--accent');
   dom.startBtn.classList.add('btn--stop');
+
   setStatus('MESSUNG LÄUFT …', 'is-running');
 
   durTimer = setInterval(() => {
@@ -698,26 +739,42 @@ function stopMeasurement() {
   dom.startBtn.classList.remove('btn--stop');
   setStatus('Messung abgeschlossen ✓', 'is-done');
 
-  if (rec && rec.t.length > 5) {
+  // Speichere den aktuell ausgewählten Ring als Ergebnis
+  const r = rings[activeUnit] || rings.vel;
+  const n = r.len;
+
+  if (rec && n > 5) {
+    const x = new Array(n), y = new Array(n), z = new Array(n), t = new Array(n);
+    for (let i = 0; i < n; i++) {
+      x[i] = ringRead(r, r.x, i);
+      y[i] = ringRead(r, r.y, i);
+      z[i] = ringRead(r, r.z, i);
+      t[i] = ringRead(r, r.t, i);
+    }
+
     savedData = {
-      unit: rec.unit,
+      unit: activeUnit,
       startTs: rec.startTs,
       durationSec: (performance.now() - rec.t0) / 1000,
-      x: rec.x.slice(), y: rec.y.slice(),
-      z: rec.z.slice(), t: rec.t.slice()
+      x, y, z, t
     };
-    dom.results.hidden      = false;
+
+    dom.results.hidden = false;
     dom.resMeta.textContent =
       `${new Date(savedData.startTs).toLocaleString('de-DE')} · ` +
       `Dauer: ${savedData.durationSec.toFixed(1)} s · ` +
-      `Punkte: ${savedData.t.length}`;
-    setTimeout(() => { resizeCanvas(dom.resultChart); drawResult(savedData); }, 80);
+      `Punkte: ${n}`;
+
+    setTimeout(() => {
+      resizeCanvas(dom.resultChart);
+      drawResult(savedData);
+    }, 80);
   }
 
   rec = null;
 }
 
-/* Start-Button (iOS permission beim Klick) */
+/* Start-Button: iOS Permission beim Klick */
 dom.startBtn.addEventListener('click', async () => {
   try {
     if (IS_IOS &&
@@ -738,7 +795,8 @@ dom.startBtn.addEventListener('click', async () => {
 dom.resetBtn.addEventListener('click', () => resetState());
 
 /* ══════════════════════════════════════════════
-   LOOP
+   LOOP – berechnet ALLE Einheiten parallel,
+   zeigt aber nur activeUnit an.
 ══════════════════════════════════════════════ */
 function loop() {
   if (!running) return;
@@ -749,10 +807,10 @@ function loop() {
   intg.prev = now;
   if (dt > 0) updateFs(dt);
 
-  // Filter + Gravity komp.
+  // Filter (linear, bandpass)
   const { ax, ay, az } = filterLinearAcc(igX, igY, igZ, accX, accY, accZ, dt);
 
-  // Integrationen
+  // Integration (v in m/s, s in m)
   const leakV = 0.985, leakP = 0.995;
   intg.vx = (intg.vx + ax * dt) * leakV;
   intg.vy = (intg.vy + ay * dt) * leakV;
@@ -762,9 +820,14 @@ function loop() {
   intg.py = (intg.py + intg.vy * dt) * leakP;
   intg.pz = (intg.pz + intg.vz * dt) * leakP;
 
-  const velTotal = Math.sqrt(intg.vx*intg.vx + intg.vy*intg.vy + intg.vz*intg.vz) * 1000;
+  // Totals
+  const accT  = Math.sqrt(ax*ax + ay*ay + az*az);
+  const velX  = intg.vx * 1000, velY = intg.vy * 1000, velZ = intg.vz * 1000; // mm/s
+  const velT  = Math.sqrt(velX*velX + velY*velY + velZ*velZ);
+  const dispX = intg.px * 1000, dispY = intg.py * 1000, dispZ = intg.pz * 1000; // mm
+  const dispT = Math.sqrt(dispX*dispX + dispY*dispY + dispZ*dispZ);
 
-  // Frequenzen
+  // Frequenzen (alle 0.5 s aktualisieren)
   pushSig(ax, ay, az);
   if (now - lastFreqUpdate > 500 && sig.len >= 64) {
     lastFreqUpdate = now;
@@ -776,38 +839,31 @@ function loop() {
     fT = dominantFreqAutocorr(readSigSeries(sig.t), fsEst, flo, fhi);
   }
 
-  // Anzeige nach Unit
-  let vx, vy, vz, vt;
-  if (activeUnit === 'acc') {
-    vx = ax; vy = ay; vz = az;
-    vt = Math.sqrt(ax*ax + ay*ay + az*az);
-  } else if (activeUnit === 'disp') {
-    vx = intg.px*1000; vy = intg.py*1000; vz = intg.pz*1000;
-    vt = Math.sqrt(vx*vx + vy*vy + vz*vz);
-  } else if (activeUnit === 'freq') {
-    vx = fX; vy = fY; vz = fZ; vt = fT;
-  } else {
-    vx = intg.vx*1000; vy = intg.vy*1000; vz = intg.vz*1000;
-    vt = velTotal;
-  }
+  // 1) alle Ringe parallel füllen
+  ringPush(rings.acc,  ax,    ay,    az,    accT);
+  ringPush(rings.vel,  velX,  velY,  velZ,  velT);
+  ringPush(rings.disp, dispX, dispY, dispZ, dispT);
+  ringPush(rings.freq, fX,    fY,    fZ,    fT);
 
-  // Ringbuffer
-  buf.x[buf.ptr] = vx; buf.y[buf.ptr] = vy;
-  buf.z[buf.ptr] = vz; buf.t[buf.ptr] = vt;
-  buf.ptr = (buf.ptr + 1) % WINDOW_LEN;
-  if (buf.len < WINDOW_LEN) buf.len++;
+  // 2) Anzeige-Ring setzen
+  liveRing = rings[activeUnit] || rings.vel;
 
-  // Statistik (vel)
-  if (velTotal > peakTotal) peakTotal = velTotal;
-  rmsAcc += velTotal * velTotal; rmsCnt++;
-  if (velTotal > EVT_THR) evtCount++;
+  // 3) UI aus Anzeige-Ring
+  const r = liveRing;
+  const last = (r.ptr - 1 + WINDOW_LEN) % WINDOW_LEN;
+  const ux = r.x[last], uy = r.y[last], uz = r.z[last], ut = r.t[last];
 
-  // UI
-  const dec = activeUnit === 'freq' ? 1 : 2;
-  dom.xVal.textContent = vx.toFixed(dec);
-  dom.yVal.textContent = vy.toFixed(dec);
-  dom.zVal.textContent = vz.toFixed(dec);
-  dom.tVal.textContent = vt.toFixed(dec);
+  const dec = (activeUnit === 'freq') ? 1 : 2;
+
+  dom.xVal.textContent = ux.toFixed(dec);
+  dom.yVal.textContent = uy.toFixed(dec);
+  dom.zVal.textContent = uz.toFixed(dec);
+  dom.tVal.textContent = ut.toFixed(dec);
+
+  // Stats immer vel (mm/s)
+  if (velT > peakTotal) peakTotal = velT;
+  rmsAcc += velT * velT; rmsCnt++;
+  if (velT > EVT_THR) evtCount++;
 
   dom.peakVal.textContent = peakTotal.toFixed(2);
   dom.rmsVal.textContent  = rmsCnt ? Math.sqrt(rmsAcc / rmsCnt).toFixed(2) : '0.00';
@@ -815,54 +871,43 @@ function loop() {
 
   // Main
   const u = unitLabel(activeUnit);
-  let main = vt, sub = `${u} (Total)`;
-  if (!vis.t) {
-    const cand = [];
-    if (vis.x) cand.push({k:'X', v:Math.abs(vx)});
-    if (vis.y) cand.push({k:'Y', v:Math.abs(vy)});
-    if (vis.z) cand.push({k:'Z', v:Math.abs(vz)});
-    if (cand.length) { cand.sort((a,b)=>b.v-a.v); main=cand[0].v; sub=`${u} (${cand[0].k})`; }
-    else { main=0; sub=`${u} (–)`; }
-  }
-  dom.mainNum.textContent = main.toFixed(dec);
-  dom.mainSub.textContent = sub;
+  dom.mainNum.textContent = ut.toFixed(dec);
+  dom.mainSub.textContent = `${u} (Total)`;
 
-  if (activeUnit === 'vel') updateDIN(velTotal);
+  if (activeUnit === 'vel') updateDIN(velT);
 
   drawLive();
 
+  // Debug
   const { lo, hi } = clampBand(FREQ_MIN_HZ, FREQ_MAX_HZ, fsEst);
   dom.debugPanel.textContent =
-    `lin ax=${ax.toFixed(3)} ay=${ay.toFixed(3)} az=${az.toFixed(3)} m/s²\n` +
-    `velTotal=${velTotal.toFixed(2)} mm/s | Peak=${peakTotal.toFixed(2)} mm/s\n` +
-    `freq X=${fX.toFixed(1)} Y=${fY.toFixed(1)} Z=${fZ.toFixed(1)} T=${fT.toFixed(1)} Hz\n` +
+    `acc lin: ${ax.toFixed(3)} ${ay.toFixed(3)} ${az.toFixed(3)} m/s²\n` +
+    `velT: ${velT.toFixed(2)} mm/s | Peak: ${peakTotal.toFixed(2)} mm/s\n` +
+    `freq: X=${fX.toFixed(1)} Y=${fY.toFixed(1)} Z=${fZ.toFixed(1)} T=${fT.toFixed(1)} Hz\n` +
     `fs≈${fsEst.toFixed(1)} Hz | Band ${lo.toFixed(1)}–${hi.toFixed(1)} Hz\n` +
-    `Events=${evtCount} | unit=${activeUnit}`;
-
-  // Recording
-  if (rec && rec.t.length < MAX_REC) {
-    rec.x.push(vx); rec.y.push(vy); rec.z.push(vz); rec.t.push(vt);
-    rec.velTotal.push(velTotal);
-  }
+    `unit=${activeUnit}`;
 }
 
 /* ══════════════════════════════════════════════
-   CSV
+   CSV EXPORT (exportiert die gespeicherte Einheit)
 ══════════════════════════════════════════════ */
 function exportCSV() {
   if (!savedData) return;
-  const u  = unitLabel(savedData.unit);
-  const n  = savedData.t.length;
+
+  const u = unitLabel(savedData.unit);
+  const n = savedData.t.length;
   const dt = savedData.durationSec / Math.max(1, n - 1);
 
-  let csv = `# HTB Schwingungsmesser Export\n`;
+  let csv = '';
+  csv += `# HTB Schwingungsmesser Export\n`;
   csv += `# Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}\n`;
   csv += `# Dauer: ${savedData.durationSec.toFixed(2)} s\n`;
-  csv += `# Einheit: ${u}\n#\n`;
+  csv += `# Einheit: ${u}\n`;
+  csv += `# Bandpass: ${FREQ_MIN_HZ}–${FREQ_MAX_HZ} Hz\n#\n`;
   csv += `i;time_s;x_${u};y_${u};z_${u};total_${u}\n`;
 
-  for (let i=0;i<n;i++){
-    csv += `${i};${(i*dt).toFixed(4)};${savedData.x[i].toFixed(6)};${savedData.y[i].toFixed(6)};${savedData.z[i].toFixed(6)};${savedData.t[i].toFixed(6)}\n`;
+  for (let i = 0; i < n; i++) {
+    csv += `${i};${(i*dt).toFixed(4)};${savedData.x[i]};${savedData.y[i]};${savedData.z[i]};${savedData.t[i]}\n`;
   }
 
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
@@ -876,30 +921,39 @@ function exportCSV() {
 $('csvBtn').addEventListener('click', exportCSV);
 
 /* ══════════════════════════════════════════════
-   PDF – nutzt dein bestehendes PDF aus der vorherigen Version
-   (wenn du willst, sag "PDF nochmal", dann gebe ich ihn hier komplett rein)
+   PDF EXPORT (einfach: Ergebnis-Chart als Screenshot)
+   Wenn du wieder die wissenschaftliche 3-Plot-Version willst,
+   sag: "PDF 3 Plots".
 ══════════════════════════════════════════════ */
-$('pdfBtn').addEventListener('click', () => setStatus('PDF-Block bitte aus deiner vorherigen Version beibehalten.', 'is-error'));
+function exportPDF() {
+  if (!savedData) { setStatus('Keine Messdaten – erst messen!', 'is-error'); return; }
+  drawResult(savedData);
 
-/* ══════════════════════════════════════════════
-   iOS Permission Button (optional)
-══════════════════════════════════════════════ */
-if (IS_IOS &&
-    typeof DeviceMotionEvent !== 'undefined' &&
-    typeof DeviceMotionEvent.requestPermission === 'function') {
-  dom.iosPermBtn.hidden = false;
-  dom.iosPermBtn.addEventListener('click', async () => {
-    try {
-      const res = await DeviceMotionEvent.requestPermission();
-      if (res === 'granted') {
-        dom.iosPermBtn.hidden = true;
-        setStatus('Sensorerlaubnis erteilt – drücke Start.', 'is-done');
-      } else setStatus('Sensorerlaubnis verweigert!', 'is-error');
-    } catch (err) {
-      setStatus('Fehler: ' + err.message, 'is-error');
-    }
-  });
+  const img = dom.resultChart.toDataURL('image/png', 1.0);
+  const w = window.open('', '_blank');
+  if (!w) { setStatus('Popup blockiert – bitte erlauben!', 'is-error'); return; }
+
+  w.document.open();
+  w.document.write(`<!doctype html><html><head>
+<meta charset="utf-8"/>
+<title>HTB Schwingungsmesser</title>
+<style>
+  body{font-family:Arial,sans-serif;margin:24px;}
+  h1{font-size:16px;margin:0 0 8px;}
+  .meta{font-size:12px;color:#444;margin-bottom:12px;}
+  img{width:100%;max-width:1100px;border:1px solid #ddd;}
+</style></head><body>
+<h1>HTB Schwingungsmesser – Diagramm</h1>
+<div class="meta">
+  Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}<br/>
+  Dauer: ${savedData.durationSec.toFixed(1)} s · Einheit: ${unitLabel(savedData.unit)}
+</div>
+<img src="${img}" alt="Diagramm"/>
+<script>setTimeout(()=>window.print(),200);<\/script>
+</body></html>`);
+  w.document.close();
 }
+$('pdfBtn').addEventListener('click', exportPDF);
 
 /* ══════════════════════════════════════════════
    PWA INSTALL
