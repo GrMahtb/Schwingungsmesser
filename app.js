@@ -196,21 +196,30 @@ document.querySelectorAll('.tab').forEach(btn => {
 function updateUnitLabels() {
   const u = unitLabel(activeUnit);
 
-  // X/Y/Z/Total zeigen die gewählte Einheit (inkl. Hz)
+  // X/Y/Z/Total Einheit
   ['unitX','unitY','unitZ','unitT'].forEach(id => {
     const el = $(id); if (el) el.textContent = u;
   });
 
-  // Peak/RMS sind IMMER Velocity (mm/s), weil DIN darauf basiert
+  // Peak/RMS bleiben immer mm/s (DIN basiert darauf)
   const up = $('unitPeak'); if (up) up.textContent = 'mm/s';
   const ur = $('unitRms');  if (ur) ur.textContent = 'mm/s';
+
+  // Untertitel sofort passend setzen (auch wenn nicht gemessen wird)
+  dom.mainSub.textContent = `${u} (Total)`;
 }
 document.querySelectorAll('.unitBtn').forEach(btn => {
   btn.addEventListener('click', () => {
     activeUnit = btn.dataset.unit;
+
     document.querySelectorAll('.unitBtn').forEach(b =>
       b.classList.toggle('is-active', b === btn));
+
     updateUnitLabels();
+
+    // Charts sofort neu zeichnen → Achsenbeschriftung + Labels aktualisiert
+    drawLive();
+    if (savedData) drawResult(savedData);
   });
 });
 
