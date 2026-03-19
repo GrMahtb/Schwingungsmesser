@@ -541,54 +541,61 @@ function drawPanel({ ctx, x, y, w, h, seriesArr, color, title, mode }) {
 function drawLive() {
   const cvs = dom.liveChart;
   const ctx = liveCtx;
+
   const W = cvs.getBoundingClientRect().width  || 300;
-  const H = cvs.getBoundingClientRect().height || 200;
+  const H = cvs.getBoundingClientRect().height || 560;
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#0b0b0c';
   ctx.fillRect(0, 0, W, H);
 
+  // Layout: 3 Panels
+  const pad = 14;
+  const gap = 18;
+  const panelH = (H - pad * 2 - gap * 2) / 3;
+  const x = pad;
+  const w = W - pad * 2;
+
+  const mode = activeUnit; // acc/vel/disp/freq
+
+  // Farben wie im Screenshot: X grün, Y blau, Z gelb (optional)
+  const cX = '#32ff6a';
+  const cY = '#4aa6ff';
+  const cZ = '#ffe95a';
+
+  // Wenn noch keine Daten: trotzdem 3 leere Frames mit Labels
+  const lenBackup = buf.len;
   if (buf.len < 2) {
-    drawAxisLabels(ctx, W, H, activeUnit);
-    return;
+    buf.len = 2; // damit drawPanel nicht leer läuft
   }
 
-  let mn = Infinity, mx = -Infinity;
-  ['x','y','z','t'].forEach(s => {
-    if (!vis[s]) return;
-    for (let i = 0; i < buf.len; i++) {
-      const v = buf[s][(buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN];
-      if (v < mn) mn = v; if (v > mx) mx = v;
-    }
+  drawPanel({
+    ctx, x, y: pad + 0 * (panelH + gap), w, h: panelH,
+    seriesArr: buf.x, color: cX,
+    title: liveTitleFor(mode, 'x'), mode
   });
-  if (!isFinite(mn)) { mn = -1; mx = 1; }
-  const rng  = (mx - mn) || 1;
-  const yMin = mn - rng*0.12;
-  const yMax = mx + rng*0.12;
 
-  // DIN lines behind curves (only in vel)
-  drawDinGuides(ctx, W, H, yMin, yMax, activeUnit);
-
-  // zero line
-  const y0 = H - ((0 - yMin) / (yMax - yMin)) * H;
-  ctx.strokeStyle = '#2a2a2d';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
-
-  // series
-  ['x','y','z','t'].forEach(s => {
-    if (!vis[s]) return;
-    ctx.strokeStyle = COLORS[s];
-    ctx.lineWidth   = (s === 't') ? 2.5 : 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < buf.len; i++) {
-      const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
-      const xp  = (i / (WINDOW_LEN - 1)) * W;
-      const yp  = H - ((buf[s][idx] - yMin) / (yMax - yMin)) * H;
-      i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
-    }
-    ctx.stroke();
+  drawPanel({
+    ctx, x, y: pad + 1 * (panelH + gap), w, h: panelH,
+    seriesArr: buf.y, color: cY,
+    title: liveTitleFor(mode, 'y'), mode
   });
+
+  drawPanel({
+    ctx, x, y: pad + 2 * (panelH + gap), w, h: panelH,
+    seriesArr: buf.z, color: cZ,
+    title: liveTitleFor(mode, 'z'), mode
+  });
+
+  // buf.len wiederherstellen (falls wir es oben temporär geändert haben)
+  buf.len = lenBackup;
+
+  // HTML-Achse unterhalb (optional – kann bleiben)
+  if (dom.liveAxis) {
+    dom.liveAxis.innerHTML =
+      ['-10s','-8s','-6s','-4s','-2s','0s'].map(t => `<span>${t}</span>`).join('');
+  }
+}
 
   drawAxisLabels(ctx, W, H, activeUnit);
 
