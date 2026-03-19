@@ -1256,3 +1256,49 @@ applyToggle('y', true);
 applyToggle('z', true);
 applyToggle('t', true);
 resetState();
+function drawLiveMulti() {
+  const cvs = dom.liveChart;
+  const ctx = liveCtx;
+
+  const W = cvs.getBoundingClientRect().width  || 300;
+  const H = cvs.getBoundingClientRect().height || 560;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0b0b0c';
+  ctx.fillRect(0, 0, W, H);
+
+  const pad = 14;
+  const gap = 18;
+  const panelH = (H - pad * 2 - gap * 2) / 3;
+  const x = pad;
+  const w = W - pad * 2;
+
+  const mode = activeUnit;
+
+  const cX = '#32ff6a';
+  const cY = '#4aa6ff';
+  const cZ = '#ffe95a';
+
+  const lenBackup = buf.len;
+  if (buf.len < 2) buf.len = 2;
+
+  drawPanel({
+    ctx, x, y: pad + 0 * (panelH + gap), w, h: panelH,
+    seriesArr: buf.x, color: cX,
+    title: liveTitleFor(mode, 'x'), mode
+  });
+
+  drawPanel({
+    ctx, x, y: pad + 1 * (panelH + gap), w, h: panelH,
+    seriesArr: buf.y, color: cY,
+    title: liveTitleFor(mode, 'y'), mode
+  });
+
+  drawPanel({
+    ctx, x, y: pad + 2 * (panelH + gap), w, h: panelH,
+    seriesArr: buf.z, color: cZ,
+    title: liveTitleFor(mode, 'z'), mode
+  });
+
+  buf.len = lenBackup;
+}
