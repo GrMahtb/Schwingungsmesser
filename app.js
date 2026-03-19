@@ -168,7 +168,7 @@ function resizeCanvas(cvs) {
 function initCanvases() {
   resizeCanvas(dom.liveChart);
   resizeCanvas(dom.resultChart);
-  drawLive();
+  drawLiveMulti();
   if (savedData) drawResult(savedData);
 }
 window.addEventListener('resize', initCanvases);
@@ -218,7 +218,7 @@ document.querySelectorAll('.unitBtn').forEach(btn => {
     updateUnitLabels();
 
     // Charts sofort neu zeichnen → Achsenbeschriftung + Labels aktualisiert
-    drawLive();
+    drawLiveMulti();
     if (savedData) drawResult(savedData);
   });
 });
@@ -745,7 +745,7 @@ function resetState() {
   document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
   dinRows.forEach(id => $(id).classList.remove('is-active'));
   setStatus('', '');
-  drawLive();
+  drawLiveMulti();
 }
 
 /* ══════════════════════════════════════════════
@@ -953,7 +953,7 @@ function loop() {
   // --- DIN (nur vel) ---
   if (activeUnit === 'vel') updateDIN(velTotal);
 
-  drawLive();
+  drawLiveMulti();
 
   // --- Debug ---
   const { lo, hi } = clampBand(FREQ_MIN_HZ, FREQ_MAX_HZ, fsEst);
