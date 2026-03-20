@@ -477,9 +477,85 @@ canvas{
 /* ══════════════════════════════
    FOOTER
 ══════════════════════════════ */
+/* ===== Brand-Bar (gelb) ===== */
+.brand{
+  border:1px solid var(--border);
+  border-radius:0;
+  margin-bottom:12px;
+  overflow:hidden;
+}
+
+.brand__bar{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:10px 14px;
+  background: var(--accent);
+}
+
+/* Logo links, kleiner */
+.brand__logo{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+}
+
+/* Schwarzes Badge hinter gelbem Logo -> gute Sichtbarkeit */
+.logoBadge{
+  background:#111;
+  padding:6px 8px;
+  border-radius:6px;
+  line-height:0;
+}
+.logoBadge svg{
+  height:38px;     /* kompakt */
+  width:auto;
+  display:block;
+}
+
+/* Text rechts: schwarz */
+.brand__text{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  min-width:0;
+}
+.brand__title{
+  color:#111;
+  font-weight:950;
+  font-size:1.15em;
+  letter-spacing:.2px;
+  line-height:1.05;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.brand__subtitle{
+  margin-top:4px;
+  color:rgba(0,0,0,.65);
+  font-size:.78em;
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+@media (max-width:420px){
+  .logoBadge svg{ height:34px; }
+  .brand__title{ font-size:1.02em; }
+}
+
+/* ===== Install Banner unten ===== */
+.installBanner--bottom{
+  margin-top:14px;
+  margin-bottom:12px;
+}
+
+/* ===== Footer ===== */
 .footer{
   text-align:center;
-  color:#333;
-  font-size:.62em;
-  margin:16px 0 24px;
+  color:#555;
+  font-size:.78em;
+  margin:10px 0 24px;
 }
+.footer b{ color:#777; font-weight:900; }
