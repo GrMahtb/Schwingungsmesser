@@ -56,6 +56,7 @@ let liveRing = rings.vel; // welcher Ring wird angezeigt
 ══════════════════════════════════════════════ */
 let running = false, startTime = null, durTimer = null, rafId = null;
 let savedData = null, rec = null;
+let savedAll = null;
 let activeUnit = 'vel';
 let noDataTimer = null, motionEventCount = 0;
 let fsEst = 60, lastFreqUpdate = 0;
@@ -629,6 +630,27 @@ function resetState() {
   fX = fY = fZ = fT = 0;
 
   // rings
+   function snapshotRing(ring) {
+  const n = ring.len;
+  const x = new Array(n), y = new Array(n), z = new Array(n), t = new Array(n);
+
+  for (let i = 0; i < n; i++) {
+    const idx = (ring.ptr - ring.len + i + WINDOW_LEN) % WINDOW_LEN;
+    x[i] = ring.x[idx];
+    y[i] = ring.y[idx];
+    z[i] = ring.z[idx];
+    t[i] = ring.t[idx];
+  }
+  return { n, x, y, z, t };
+}
+
+function unitLabelFromKey(k){
+  return k === 'acc' ? 'm/s²' : k === 'disp' ? 'mm' : k === 'freq' ? 'Hz' : 'mm/s';
+}
+
+function yAxisTextFromKey(k){
+  return k === 'acc' ? 'a (m/s²)' : k === 'disp' ? 's (mm)' : k === 'freq' ? 'f (Hz)' : 'v (mm/s)';
+}
   ringReset(rings.acc);
   ringReset(rings.vel);
   ringReset(rings.disp);
@@ -770,6 +792,26 @@ function stopMeasurement() {
       drawResult(savedData);
     }, 80);
   }
+   // Alle Einheiten parallel sichern (letzte Messung)
+if (typeof rings !== 'undefined' && rings.vel) {
+  const sVel  = snapshotRing(rings.vel);
+  const sAcc  = snapshotRing(rings.acc);
+  const sDisp = snapshotRing(rings.disp);
+  const sFreq = snapshotRing(rings.freq);
+
+  const durationSec = (performance.now() - rec.t0) / 1000;
+
+  savedAll = {
+    startTs: rec.startTs,
+    durationSec,
+    units: {
+      vel:  { unitKey:'vel',  ...sVel  },
+      acc:  { unitKey:'acc',  ...sAcc  },
+      disp: { unitKey:'disp', ...sDisp },
+      freq: { unitKey:'freq', ...sFreq }
+    }
+  };
+}
 
   rec = null;
 }
@@ -887,38 +929,61 @@ function loop() {
     `fs≈${fsEst.toFixed(1)} Hz | Band ${lo.toFixed(1)}–${hi.toFixed(1)} Hz\n` +
     `unit=${activeUnit}`;
 }
+// Alle Einheiten parallel sichern (letzte Messung)
+if (typeof rings !== 'undefined' && rings.vel) {
+  const sVel  = snapshotRing(rings.vel);
+  const sAcc  = snapshotRing(rings.acc);
+  const sDisp = snapshotRing(rings.disp);
+  const sFreq = snapshotRing(rings.freq);
+
+  const durationSec = (performance.now() - rec.t0) / 1000;
+
+  savedAll = {
+    startTs: rec.startTs,
+    durationSec,
+    units: {
+      vel:  { unitKey:'vel',  ...sVel  },
+      acc:  { unitKey:'acc',  ...sAcc  },
+      disp: { unitKey:'disp', ...sDisp },
+      freq: { unitKey:'freq', ...sFreq }
+    }
+  };
+}
 
 /* ══════════════════════════════════════════════
    CSV EXPORT (exportiert die gespeicherte Einheit)
 ══════════════════════════════════════════════ */
 function exportCSV() {
-  if (!savedData) return;
+  if (!savedAll) { setStatus('Keine Messdaten – erst messen!', 'is-error'); return; }
 
-  const u = unitLabel(savedData.unit);
-  const n = savedData.t.length;
-  const dt = savedData.durationSec / Math.max(1, n - 1);
+  const unitKey = $('exportUnit')?.value || 'vel';
+  const d = savedAll.units[unitKey];
+  if (!d || d.n < 2) { setStatus('Keine Daten für diese Einheit.', 'is-error'); return; }
+
+  const unit = unitLabelFromKey(unitKey);
+  const dt = savedAll.durationSec / Math.max(1, d.n - 1);
 
   let csv = '';
   csv += `# HTB Schwingungsmesser Export\n`;
-  csv += `# Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}\n`;
-  csv += `# Dauer: ${savedData.durationSec.toFixed(2)} s\n`;
-  csv += `# Einheit: ${u}\n`;
-  csv += `# Bandpass: ${FREQ_MIN_HZ}–${FREQ_MAX_HZ} Hz\n#\n`;
-  csv += `i;time_s;x_${u};y_${u};z_${u};total_${u}\n`;
+  csv += `# Start: ${new Date(savedAll.startTs).toLocaleString('de-DE')}\n`;
+  csv += `# Dauer: ${savedAll.durationSec.toFixed(2)} s\n`;
+  csv += `# Einheit: ${unit}\n#\n`;
+  csv += `i;time_s;x_${unit};y_${unit};z_${unit};total_${unit}\n`;
 
-  for (let i = 0; i < n; i++) {
-    csv += `${i};${(i*dt).toFixed(4)};${savedData.x[i]};${savedData.y[i]};${savedData.z[i]};${savedData.t[i]}\n`;
+  for (let i = 0; i < d.n; i++) {
+    csv += `${i};${(i*dt).toFixed(4)};${d.x[i].toFixed(6)};${d.y[i].toFixed(6)};${d.z[i].toFixed(6)};${d.t[i].toFixed(6)}\n`;
   }
 
-  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url;
-  a.download = `HTB_Messung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+  a.download = `HTB_${unitKey}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
 $('csvBtn').addEventListener('click', exportCSV);
+$('pdfBtn').addEventListener('click', exportPDF);
 
 /* ══════════════════════════════════════════════
    PDF EXPORT (einfach: Ergebnis-Chart als Screenshot)
@@ -926,35 +991,80 @@ $('csvBtn').addEventListener('click', exportCSV);
    sag: "PDF 3 Plots".
 ══════════════════════════════════════════════ */
 function exportPDF() {
-  if (!savedData) { setStatus('Keine Messdaten – erst messen!', 'is-error'); return; }
-  drawResult(savedData);
+  if (!savedAll) { setStatus('Keine Messdaten – erst messen!', 'is-error'); return; }
 
-  const img = dom.resultChart.toDataURL('image/png', 1.0);
+  const unitKey = $('exportUnit')?.value || 'vel';
+  const d = savedAll.units[unitKey];
+  if (!d || d.n < 2) { setStatus('Keine Daten für diese Einheit.', 'is-error'); return; }
+
+  const unit = unitLabelFromKey(unitKey);
+  const yLabel = yAxisTextFromKey(unitKey);
+  const dur = savedAll.durationSec;
+
+  const imgX = plotScientificPNG({ series: d.x, title: 'X-Achse', yLabel, color: '#ff4444', durationSec: dur });
+  const imgY = plotScientificPNG({ series: d.y, title: 'Y-Achse', yLabel, color: '#00cc66', durationSec: dur });
+  const imgZ = plotScientificPNG({ series: d.z, title: 'Z-Achse', yLabel, color: '#4499ff', durationSec: dur });
+
   const w = window.open('', '_blank');
-  if (!w) { setStatus('Popup blockiert – bitte erlauben!', 'is-error'); return; }
+  if (!w) { setStatus('Popup blockiert – bitte Popups erlauben!', 'is-error'); return; }
 
   w.document.open();
   w.document.write(`<!doctype html><html><head>
 <meta charset="utf-8"/>
-<title>HTB Schwingungsmesser</title>
+<title>HTB Export</title>
 <style>
-  body{font-family:Arial,sans-serif;margin:24px;}
-  h1{font-size:16px;margin:0 0 8px;}
-  .meta{font-size:12px;color:#444;margin-bottom:12px;}
-  img{width:100%;max-width:1100px;border:1px solid #ddd;}
-</style></head><body>
-<h1>HTB Schwingungsmesser – Diagramm</h1>
+  @page { size:A4 portrait; margin:12mm; }
+  body{ font-family: Arial, sans-serif; margin:0; padding:12mm; color:#111; background:#fff; }
+  h1{ font-size:16px; margin:0 0 6px; }
+  .meta{ font-size:11px; color:#444; line-height:1.5; margin-bottom:10px; border-bottom:1px solid #ddd; padding-bottom:6px; }
+  .plot{ margin:10px 0; page-break-inside:avoid; }
+  .plot img{ width:100%; border:1px solid #ddd; }
+</style>
+</head><body>
+<h1>HTB Schwingungsmesser – Export</h1>
 <div class="meta">
-  Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}<br/>
-  Dauer: ${savedData.durationSec.toFixed(1)} s · Einheit: ${unitLabel(savedData.unit)}
+  Start: ${new Date(savedAll.startTs).toLocaleString('de-DE')}<br/>
+  Dauer: ${dur.toFixed(1)} s · Einheit: ${unit} · Punkte: ${d.n}
 </div>
-<img src="${img}" alt="Diagramm"/>
-<script>setTimeout(()=>window.print(),200);<\/script>
+
+<div class="plot"><img src="${imgX}" alt="X"></div>
+<div class="plot"><img src="${imgY}" alt="Y"></div>
+<div class="plot"><img src="${imgZ}" alt="Z"></div>
+
+<script>setTimeout(()=>window.print(),250);<\/script>
 </body></html>`);
   w.document.close();
 }
 $('pdfBtn').addEventListener('click', exportPDF);
+function exportCSV() {
+  if (!savedAll) { setStatus('Keine Messdaten – erst messen!', 'is-error'); return; }
 
+  const unitKey = $('exportUnit')?.value || 'vel';
+  const d = savedAll.units[unitKey];
+  if (!d || d.n < 2) { setStatus('Keine Daten für diese Einheit.', 'is-error'); return; }
+
+  const unit = unitLabelFromKey(unitKey);
+  const dt = savedAll.durationSec / Math.max(1, d.n - 1);
+
+  let csv = '';
+  csv += `# HTB Schwingungsmesser Export\n`;
+  csv += `# Start: ${new Date(savedAll.startTs).toLocaleString('de-DE')}\n`;
+  csv += `# Dauer: ${savedAll.durationSec.toFixed(2)} s\n`;
+  csv += `# Einheit: ${unit}\n#\n`;
+  csv += `i;time_s;x_${unit};y_${unit};z_${unit};total_${unit}\n`;
+
+  for (let i = 0; i < d.n; i++) {
+    csv += `${i};${(i*dt).toFixed(4)};${d.x[i].toFixed(6)};${d.y[i].toFixed(6)};${d.z[i].toFixed(6)};${d.t[i].toFixed(6)}\n`;
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `HTB_${unitKey}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 /* ══════════════════════════════════════════════
    PWA INSTALL
 ══════════════════════════════════════════════ */
