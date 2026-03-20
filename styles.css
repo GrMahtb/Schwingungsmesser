@@ -554,3 +554,31 @@ header.brand,
 header.brand .brand__bar{
   background:#000 !important;
 }
+.exportRow{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  margin:8px 0 12px;
+  flex-wrap:wrap;
+}
+
+.exportLabel{
+  color:var(--muted);
+  font-size:.82em;
+  font-weight:900;
+}
+
+.select{
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 900;
+  outline: none;
+}
+.select:focus{
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(255,237,0,.15);
+}
