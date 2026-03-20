@@ -549,6 +549,8 @@ header.brand .brand__bar{
   background:#000 !important;
 }
 
+/* FORCE: Header wirklich schwarz */
+header.brand,
 header.brand .brand__bar{
-  border-radius:0 !important;
+  background:#000 !important;
 }
