@@ -982,6 +982,30 @@ function exportCSV() {
   a.click();
   URL.revokeObjectURL(url);
 }
+/* ══════════════════════════════════════════════
+   EXPORT HELPERS
+══════════════════════════════════════════════ */
+function snapshotRing(ring) {
+  const n = ring.len;
+  const x = new Array(n), y = new Array(n),
+        z = new Array(n), t = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const idx = (ring.ptr - ring.len + i + WINDOW_LEN) % WINDOW_LEN;
+    x[i] = ring.x[idx];
+    y[i] = ring.y[idx];
+    z[i] = ring.z[idx];
+    t[i] = ring.t[idx];
+  }
+  return { n, x, y, z, t };
+}
+
+function unitLabelFromKey(k) {
+  return k === 'acc' ? 'm/s²' : k === 'disp' ? 'mm' : k === 'freq' ? 'Hz' : 'mm/s';
+}
+
+function yAxisTextFromKey(k) {
+  return k === 'acc' ? 'a (m/s²)' : k === 'disp' ? 's (mm)' : k === 'freq' ? 'f (Hz)' : 'v (mm/s)';
+}
 $('csvBtn').addEventListener('click', exportCSV);
 $('pdfBtn').addEventListener('click', exportPDF);
 
