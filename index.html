@@ -176,14 +176,26 @@
         <div id="resAxis" class="axis"></div>
       </section>
       <section class="card">
-        <div class="card__title">Export</div>
-        <div class="buttons">
-          <button id="csvBtn" class="btn btn--ok" type="button">CSV</button>
-          <button id="pdfBtn" class="btn btn--ghost" type="button">PDF</button>
-        </div>
-        <div class="hint">PDF öffnet den Druckdialog → „Als PDF speichern" wählen.</div>
-      </section>
-    </section>
+       <section class="card">
+  <div class="card__title">Export</div>
+
+  <div class="exportRow">
+    <label class="exportLabel" for="exportUnit">Einheit</label>
+    <select id="exportUnit" class="select">
+      <option value="vel" selected>mm/s</option>
+      <option value="acc">m/s²</option>
+      <option value="disp">mm</option>
+      <option value="freq">Hz</option>
+    </select>
+  </div>
+
+  <div class="buttons">
+    <button id="csvBtn" class="btn btn--ok" type="button">CSV</button>
+    <button id="pdfBtn" class="btn btn--ghost" type="button">PDF</button>
+  </div>
+
+  <div class="hint">PDF öffnet den Druckdialog → „Als PDF speichern“ wählen.</div>
+</section>
 
   </main>
 
