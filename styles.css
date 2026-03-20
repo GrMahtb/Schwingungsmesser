@@ -543,3 +543,12 @@ canvas{
   margin:10px 0 24px;
 }
 .footer b{ color:#777; font-weight:900; }
+/* FORCE: Header wirklich schwarz */
+header.brand,
+header.brand .brand__bar{
+  background:#000 !important;
+}
+
+header.brand .brand__bar{
+  border-radius:0 !important;
+}
