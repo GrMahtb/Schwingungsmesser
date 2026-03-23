@@ -887,4 +887,95 @@ function exportCSV() {
       csv += `${i};${(i*dt).toFixed(4)};${(data.freq[i]||0).toFixed(2)}\n`;
     }
   } else {
-    csv += `i;time_s;x_${u};y_${u};
+    csv += `i;time_s;x_${u};y_${u};z_${u};total_${u}\n`;
+    for (let i = 0; i < n; i++) {
+      const cx = convert(data.x[i]).toFixed(6);
+      const cy = convert(data.y[i]).toFixed(6);
+      const cz = convert(data.z[i]).toFixed(6);
+      const ct = convert(data.t[i]).toFixed(6);
+      csv += `${i};${(i*dt).toFixed(4)};${cx};${cy};${cz};${ct}\n`;
+    }
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `HTB_Messung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+$('csvBtn').addEventListener('click', exportCSV);
+
+/* ══════════════════════════════════════════════
+   PDF EXPORT – 3 Plots, A4, wissenschaftlich
+══════════════════════════════════════════════ */
+function plotToDataURL({ series, title, unit, color, durationSec }) {
+  const W = 1200, H = 260;
+  const mL = 74, mR = 20, mT = 32, mB = 50;
+  const pw = W - mL - mR, ph = H - mT - mB;
+
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 12; i++) {
+    const x = mL + (i/12)*pw;
+    ctx.beginPath(); ctx.moveTo(x, mT); ctx.lineTo(x, mT+ph); ctx.stroke();
+  }
+  for (let j = 0; j <= 5; j++) {
+    const y = mT + (j/5)*ph;
+    ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL+pw, y); ctx.stroke();
+  }
+
+  // Min/Max
+  let mn = Infinity, mx = -Infinity;
+  for (const v of series) { if (v < mn) mn = v; if (v > mx) mx = v; }
+  if (!isFinite(mn)) { mn = -1; mx = 1; }
+  if (mn === mx) { mn -= 1; mx += 1; }
+  const pad = (mx - mn) * 0.08;
+  mn -= pad; mx += pad;
+  const yOf = (v) => mT + ph - ((v - mn) / (mx - mn)) * ph;
+
+  // Achsen
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(mL, mT); ctx.lineTo(mL, mT+ph); ctx.lineTo(mL+pw, mT+ph);
+  ctx.stroke();
+
+  // Nulllinie
+  const y0 = yOf(0);
+  if (y0 >= mT && y0 <= mT+ph) {
+    ctx.strokeStyle = '#bbb'; ctx.lineWidth = 1;
+    ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(mL, y0); ctx.lineTo(mL+pw, y0); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Titel
+  ctx.fillStyle = color; ctx.font = 'bold 15px Arial';
+  ctx.fillText(title, mL, 22);
+
+  // Y-Einheit (rotiert)
+  ctx.save();
+  ctx.translate(14, mT + ph/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillStyle = '#555'; ctx.font = '12px Arial'; ctx.textAlign = 'center';
+  ctx.fillText(unit, 0, 0);
+  ctx.restore();
+
+  // Y-Ticks (6)
+  ctx.fillStyle = '#333'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
+  for (let j = 0; j <= 5; j++) {
+    const vv = mn + (j/5)*(mx-mn);
+    const yy = yOf(vv);
+    ctx.fillText(vv.toFixed(3), mL-5, yy+4);
+    ctx.strokeStyle = '#ccc'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(mL-3, yy); ctx.lineTo(mL, yy); ctx.stroke();
+  }
+
+  //
