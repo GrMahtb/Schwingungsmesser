@@ -603,3 +603,328 @@ dom.pdfBtn?.addEventListener('click', exportPDF);
 
 /* init */
 resetState();
+/* ===================== FEHLENDE VARIABLEN ===================== */
+let lastFreqUpdate = 0;
+const EVT_THR = 0.1; // mm/s
+
+/* ===================== TABS ===================== */
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b =>
+      b.classList.toggle('is-active', b === btn));
+    document.querySelectorAll('.pane').forEach(p => {
+      const on = p.id === `tab-${btn.dataset.tab}`;
+      p.classList.toggle('is-active', on);
+      p.hidden = !on;
+    });
+    setTimeout(initCanvases, 60);
+  });
+});
+
+/* ===================== AXIS TOGGLES ===================== */
+const vis = { x:true, y:true, z:true, t:true };
+
+function applyToggle(s, on) {
+  vis[s] = on;
+  document.querySelectorAll(`[data-series="${s}"]`).forEach(el =>
+    el.classList.toggle('is-off', !on));
+  if (dom.dinNote) dom.dinNote.hidden = vis.t;
+}
+document.querySelectorAll('.tile[data-series], .legendBtn[data-series]').forEach(btn => {
+  btn.addEventListener('click', () =>
+    applyToggle(btn.dataset.series, !vis[btn.dataset.series]));
+});
+
+/* ===================== ÖNORM S9020 BEWERTUNG ===================== */
+/* Richtwerte vres,max (mm/s) nach ÖNORM S9020 (2015):
+   Industriebauten:           30 mm/s
+   Wohngebäude modern:        20 mm/s
+   Wohngebäude traditionell:  10 mm/s
+   Empfindliche Gebäude:       5 mm/s
+   Denkmalgeschützt:           3 mm/s
+*/
+const oenormRows   = ['n0','n1','n2','n3','n4'];
+const oenormBounds = [0, 5, 10, 20, 30];  // mm/s
+
+function updateOENORM(vMms) {
+  // Highlight der passenden Zeile (aktuelle Messung)
+  let row = 0;
+  for (let i = oenormBounds.length - 1; i >= 0; i--) {
+    if (vMms >= oenormBounds[i]) { row = i; break; }
+  }
+  oenormRows.forEach((id, i) => {
+    const el = $(id);
+    if (el) el.classList.toggle('is-active', i === row);
+  });
+}
+
+/* ===================== LIVE CHART: EINZELNES PANEL ===================== */
+function drawPanel({ ctx, x, y, w, h, arr, title, mode, color }) {
+  ctx.save();
+
+  // Hintergrund
+  ctx.fillStyle = '#111113';
+  ctx.fillRect(x, y, w, h);
+
+  // Rahmen
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.strokeRect(x, y, w, h);
+
+  // Min/Max aus Buffer
+  let mx = 0;
+  for (let i = 0; i < buf.len; i++) {
+    const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
+    mx = Math.max(mx, Math.abs(arr[idx]));
+  }
+  if (mx === 0 || !isFinite(mx)) mx = 1;
+
+  const yMin = -mx * 1.2;
+  const yMax =  mx * 1.2;
+  const yOf  = (v) => y + h - ((v - yMin) / (yMax - yMin)) * h;
+
+  // Gitternetz
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 7]);
+  for (let i = 1; i <= 4; i++) {
+    const gx = x + (i/5)*w;
+    ctx.beginPath(); ctx.moveTo(gx,y); ctx.lineTo(gx,y+h); ctx.stroke();
+  }
+  for (let j = 1; j <= 3; j++) {
+    const gy = y + (j/4)*h;
+    ctx.beginPath(); ctx.moveTo(x,gy); ctx.lineTo(x+w,gy); ctx.stroke();
+  }
+
+  // ÖNORM S9020 Grenzlinien (nur vel, dezent gelb)
+  if (mode === 'vel') {
+    ctx.strokeStyle = 'rgba(255,237,0,0.18)';
+    ctx.setLineDash([4, 6]);
+    ctx.lineWidth = 1;
+    for (const g of [5, 10, 20, 30]) {
+      const yg  = yOf(g);
+      const ygn = yOf(-g);
+      if (yg > y && yg < y+h) {
+        ctx.beginPath(); ctx.moveTo(x,yg); ctx.lineTo(x+w,yg); ctx.stroke();
+      }
+      if (ygn > y && ygn < y+h) {
+        ctx.beginPath(); ctx.moveTo(x,ygn); ctx.lineTo(x+w,ygn); ctx.stroke();
+      }
+    }
+  }
+
+  // Null-Linie
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+  ctx.lineWidth = 1;
+  const y0 = yOf(0);
+  if (y0 > y && y0 < y+h) {
+    ctx.beginPath(); ctx.moveTo(x,y0); ctx.lineTo(x+w,y0); ctx.stroke();
+  }
+
+  // Kurve
+  if (buf.len >= 2) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < buf.len; i++) {
+      const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
+      const xp  = x + (i / (WINDOW_LEN - 1)) * w;
+      const yp  = yOf(arr[idx]);
+      i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
+    }
+    ctx.stroke();
+  }
+
+  // Y-Ticks (Zahlenwerte links)
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = '10px system-ui, Arial';
+  ctx.textAlign = 'right';
+  const tickVals = [mx, mx/2, 0, -mx/2, -mx];
+  for (const v of tickVals) {
+    const yp = yOf(v);
+    if (yp > y+4 && yp < y+h-4) {
+      ctx.fillText(v === 0 ? '0' : v.toFixed(2), x + 42, yp + 4);
+    }
+  }
+
+  // X-Ticks (Zeit unten)
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = '10px system-ui, Arial';
+  for (const t of [0, 2, 4, 6, 8, 10]) {
+    ctx.fillText(`${t}`, x + (t/10)*w, y + h - 4);
+  }
+
+  // Titel (oben zentriert)
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.font = 'bold 12px system-ui, Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, x + w/2, y + 16);
+
+  // Y-Achsen-Label (rotiert links)
+  ctx.save();
+  ctx.translate(x + 10, y + h/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillStyle = 'rgba(255,255,255,0.50)';
+  ctx.font = '10px system-ui, Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(yAxisText(mode), 0, 0);
+  ctx.restore();
+
+  // X-Label rechts unten
+  ctx.fillStyle = 'rgba(255,255,255,0.40)';
+  ctx.font = '10px system-ui, Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText('t (s)', x + w - 3, y + h - 4);
+
+  ctx.restore();
+}
+
+/* ===================== LIVE CHART: 3 PANELS ===================== */
+function drawLive() {
+  if (!dom.liveChart || !liveCtx) return;
+
+  const cvs = dom.liveChart;
+  const ctx = liveCtx;
+  const W   = cvs.getBoundingClientRect().width  || 300;
+  const H   = cvs.getBoundingClientRect().height || 560;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0b0b0c';
+  ctx.fillRect(0, 0, W, H);
+
+  const pad    = 10;
+  const gap    = 10;
+  const left   = 48;  // Platz für Y-Ticks
+  const right  = 8;
+  const panelH = Math.floor((H - pad*2 - gap*2) / 3);
+  const pw     = W - left - right;
+
+  const mode  = running ? measureUnit : activeUnit;
+  const label = {
+    vel:  ['v X (mm/s)', 'v Y (mm/s)', 'v Z (mm/s)'],
+    acc:  ['a X (m/s²)', 'a Y (m/s²)', 'a Z (m/s²)'],
+    disp: ['s X (mm)',   's Y (mm)',   's Z (mm)'],
+    freq: ['f X (Hz)',   'f Y (Hz)',   'f Z (Hz)']
+  };
+  const titles = label[mode] || label.vel;
+
+  drawPanel({ ctx, x:left, y: pad + 0*(panelH+gap), w:pw, h:panelH,
+    arr: buf.x, title: titles[0], mode, color: COLORS.x });
+
+  drawPanel({ ctx, x:left, y: pad + 1*(panelH+gap), w:pw, h:panelH,
+    arr: buf.y, title: titles[1], mode, color: COLORS.y });
+
+  drawPanel({ ctx, x:left, y: pad + 2*(panelH+gap), w:pw, h:panelH,
+    arr: buf.z, title: titles[2], mode, color: COLORS.z });
+}
+
+/* ===================== RESULT CHART ===================== */
+function drawResult(data) {
+  if (!dom.resultChart || !resCtx) return;
+
+  const cvs = dom.resultChart;
+  const ctx = resCtx;
+  const W   = cvs.getBoundingClientRect().width  || 300;
+  const H   = cvs.getBoundingClientRect().height || 220;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0b0b0c';
+  ctx.fillRect(0, 0, W, H);
+
+  let mn=Infinity, mx=-Infinity;
+  ['x','y','z','t'].forEach(s => {
+    (data[s] || []).forEach(v => { mn=Math.min(mn,v); mx=Math.max(mx,v); });
+  });
+  if (!isFinite(mn)) { mn=-1; mx=1; }
+  const rng=(mx-mn)||1;
+  const yMin=mn-rng*0.12, yMax=mx+rng*0.12;
+
+  // zero
+  const y0 = H - ((0-yMin)/(yMax-yMin))*H;
+  ctx.strokeStyle='#2a2a2d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,y0); ctx.lineTo(W,y0); ctx.stroke();
+
+  const c = { x:'#32ff6a', y:'#4aa6ff', z:'#ffe95a', t:'#ffed00' };
+  ['x','y','z','t'].forEach(s => {
+    const series = data[s] || [];
+    if (series.length < 2) return;
+    ctx.strokeStyle = c[s];
+    ctx.lineWidth   = s==='t' ? 2.5 : 1.5;
+    ctx.beginPath();
+    series.forEach((v, i) => {
+      const xp = (i/(series.length-1))*W;
+      const yp = H - ((v-yMin)/(yMax-yMin))*H;
+      i===0 ? ctx.moveTo(xp,yp) : ctx.lineTo(xp,yp);
+    });
+    ctx.stroke();
+  });
+
+  if (dom.resAxis) dom.resAxis.innerHTML = '<span>Anfang</span><span>Ende</span>';
+}
+
+/* ===================== PWA INSTALL ===================== */
+(() => {
+  const IS_STANDALONE = window.matchMedia('(display-mode: standalone)').matches
+    || navigator.standalone === true;
+
+  const banner    = $('installBanner');
+  const installBtn = $('installBtn');
+  if (!banner || !installBtn) return;
+
+  if (IS_STANDALONE) { banner.hidden = true; return; }
+
+  let deferredPrompt = null;
+
+  if (IS_IOS) {
+    banner.hidden = false;
+    installBtn.textContent = 'Anleitung';
+    installBtn.onclick = () =>
+      setStatus('iPhone: Safari → Teilen (□↑) → „Zum Home-Bildschirm"', 'is-error');
+    return;
+  }
+
+  banner.hidden = true;
+  installBtn.disabled = true;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    banner.hidden = false;
+    installBtn.disabled = false;
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) {
+      setStatus('Chrome-Menü (⋮) → „App installieren"', 'is-error');
+      return;
+    }
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    banner.hidden = true;
+    installBtn.disabled = true;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    banner.hidden = true;
+    installBtn.disabled = true;
+  });
+})();
+
+/* ===================== SERVICE WORKER ===================== */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+/* ===================== INIT ===================== */
+applyToggle('x', true);
+applyToggle('y', true);
+applyToggle('z', true);
+applyToggle('t', true);
+resetState();
