@@ -1,7 +1,5 @@
 'use strict';
-
-// === VERSION MARKER (hilft beim Debuggen) ===
-console.log('APP VERSION v2026-03-23-export+axes loaded');
+console.log('APP VERSION v2026-03-23-hz-series loaded');
 
 // ===================== KONFIG =====================
 const SAMPLE_RATE = 60;
@@ -10,6 +8,7 @@ const WINDOW_LEN = WIN_SEC * SAMPLE_RATE;
 
 const FREQ_WIN_SEC = 2;
 const FREQ_WIN = FREQ_WIN_SEC * SAMPLE_RATE;
+const FREQ_UPDATE_EVERY_N_FRAMES = 10; // Hz-Schätzung 6x/s bei ~60fps
 
 const COLORS = { x:'#ff4444', y:'#00cc66', z:'#4499ff' };
 
@@ -51,7 +50,7 @@ const OENORM = {
       {id:'n3',range:'0.318 – 0.478 mm',label:'Klasse IV – mittlere Schäden möglich'},
       {id:'n4',range:'> 0.478 mm',label:'Klasse V – schwere Schäden möglich'},
     ]},
-  hz: { hint:'Hz: dominante Frequenz (Zero‑Crossing) – zur Plausibilisierung (ÖNORM gilt für mm/s).', bounds:null,
+  hz: { hint:'Hz: dominante Frequenz (Zero‑Crossing) aus vel(t) der letzten 2s.', bounds:null,
     rows:[
       {id:'n0',range:'1 – 8 Hz',label:'Typisch: Pfahlrammung / langsame Erschütterung'},
       {id:'n1',range:'2 – 15 Hz',label:'Typisch: Bagger, Abbruch, Schwerlast‑Verkehr'},
@@ -219,29 +218,39 @@ const hp = { x:0, y:0, z:0, px:0, py:0, pz:0 };
 const lp = { x:0, y:0, z:0 };
 const intg = { vx:0, vy:0, vz:0, px:0, py:0, pz:0, prev:null };
 
+// Ringbuffer: alle Einheiten parallel + Hz
 const ring = {
   ptr: 0, len: 0,
   vel: { x:new Float32Array(WINDOW_LEN), y:new Float32Array(WINDOW_LEN), z:new Float32Array(WINDOW_LEN), t:new Float32Array(WINDOW_LEN) },
   acc: { x:new Float32Array(WINDOW_LEN), y:new Float32Array(WINDOW_LEN), z:new Float32Array(WINDOW_LEN), t:new Float32Array(WINDOW_LEN) },
   disp:{ x:new Float32Array(WINDOW_LEN), y:new Float32Array(WINDOW_LEN), z:new Float32Array(WINDOW_LEN), t:new Float32Array(WINDOW_LEN) },
+  hz:  { x:new Float32Array(WINDOW_LEN), y:new Float32Array(WINDOW_LEN), z:new Float32Array(WINDOW_LEN), t:new Float32Array(WINDOW_LEN) },
 };
 
-const freqBuf = { t:new Float32Array(FREQ_WIN), ptr:0, len:0 };
-let domFreqHz = 0;
+// Frequenzfenster für ZC-Schätzung (auf vel basierend)
+const freqWin = {
+  ptr: 0, len: 0,
+  x: new Float32Array(FREQ_WIN),
+  y: new Float32Array(FREQ_WIN),
+  z: new Float32Array(FREQ_WIN),
+  t: new Float32Array(FREQ_WIN),
+};
 
-// parallel stats
+let hzNow = { x:0, y:0, z:0, t:0 };
+let hzFrameCounter = 0;
+
 const stats = {
   vel:  { peak:0, sum2:0, cnt:0 },
   acc:  { peak:0, sum2:0, cnt:0 },
   disp: { peak:0, sum2:0, cnt:0 },
-  hz:   { peak:0, sum:0,  cnt:0 },
+  hz:   { peak:0, sum:0,  cnt:0 }, // total Hz stats
 };
 
 let last = {
   vel:{x:0,y:0,z:0,t:0,rms:0,peak:0},
   acc:{x:0,y:0,z:0,t:0,rms:0,peak:0},
   disp:{x:0,y:0,z:0,t:0,rms:0,peak:0},
-  hz: {t:0,rms:0,peak:0}
+  hz:{x:0,y:0,z:0,t:0,rms:0,peak:0}
 };
 
 let savedData = null;
@@ -282,19 +291,29 @@ function integrate(fx, fy, fz, dt) {
   intg.pz = (intg.pz + intg.vz * dt) * LEAK_P;
 }
 
-function estimateFrequencyHz() {
-  if (freqBuf.len < 10) return 0;
+// Zero-Crossing Frequenz mit Deadband + Amplitudencheck
+function estimateHzFromWindow(arr, len, ptr) {
+  if (len < 10) return 0;
 
-  // Deadband gegen Rauschen (sonst zu viele crossings)
+  // Amplitudencheck: wenn praktisch nichts los ist -> 0 Hz
+  let meanAbs = 0;
+  for (let i=0;i<len;i++){
+    const v = arr[(ptr - len + i + FREQ_WIN) % FREQ_WIN];
+    meanAbs += Math.abs(v);
+  }
+  meanAbs /= len;
+  if (meanAbs < 0.15) return 0; // mm/s Schwelle (gegen Rauschen)
+
+  const eps = 0.05; // Deadband mm/s
   let crossings = 0;
-  const eps = 0.05; // mm/s
-  const get = (i) => freqBuf.t[(freqBuf.ptr - freqBuf.len + i + FREQ_WIN) % FREQ_WIN];
 
-  let prev = get(0);
-  for (let i = 1; i < freqBuf.len; i++) {
-    const cur = get(i);
+  let prev = arr[(ptr - len + FREQ_WIN) % FREQ_WIN];
+  for (let i = 1; i < len; i++) {
+    const cur = arr[(ptr - len + i + FREQ_WIN) % FREQ_WIN];
+
     const p = Math.abs(prev) < eps ? 0 : prev;
     const c = Math.abs(cur)  < eps ? 0 : cur;
+
     if ((p < 0 && c > 0) || (p > 0 && c < 0)) crossings++;
     prev = cur;
   }
@@ -305,51 +324,43 @@ function estimateFrequencyHz() {
 function renderFromLast() {
   if (!dom.mainNum) return;
 
-  if (activeUnit === 'hz') {
-    const t = last.hz.t;
-    dom.xVal.textContent = t.toFixed(2);
-    dom.yVal.textContent = t.toFixed(2);
-    dom.zVal.textContent = t.toFixed(2);
-    dom.tVal.textContent = t.toFixed(2);
-    dom.peakVal.textContent = last.hz.peak.toFixed(2);
-    dom.rmsVal.textContent  = last.hz.rms.toFixed(2);
-    dom.mainNum.textContent = t.toFixed(2);
-    dom.mainSub.textContent = `Hz (dominant)`;
-    updateOenormHighlight(t);
-    return;
-  }
+  const u = unitLabel(activeUnit);
+  ['unitX','unitY','unitZ','unitT','unitPeak','unitRms'].forEach(id => {
+    const el = $(id); if (el) el.textContent = u;
+  });
 
   const pack = last[activeUnit];
+
   dom.xVal.textContent = pack.x.toFixed(2);
   dom.yVal.textContent = pack.y.toFixed(2);
   dom.zVal.textContent = pack.z.toFixed(2);
   dom.tVal.textContent = pack.t.toFixed(2);
   dom.peakVal.textContent = pack.peak.toFixed(2);
   dom.rmsVal.textContent  = pack.rms.toFixed(2);
+
   dom.mainNum.textContent = pack.t.toFixed(2);
-  dom.mainSub.textContent = `${unitLabel(activeUnit)} (Total)`;
-  updateOenormHighlight(pack.peak);
+  dom.mainSub.textContent = (activeUnit === 'hz') ? `Hz (Total dominant)` : `${u} (Total)`;
+
+  // „Dom. Freq.“ Tile immer Total-Hz
+  if (dom.freqVal) dom.freqVal.textContent = hzNow.t ? hzNow.t.toFixed(1) : '—';
+
+  // ÖNORM: im Hz-Modus anhand Total-Hz, sonst anhand Peak der gewählten Einheit
+  updateOenormHighlight(activeUnit === 'hz' ? pack.t : pack.peak);
 }
 
 function setUnitUI() {
-  const u = unitLabel(activeUnit);
-  ['unitX','unitY','unitZ','unitT','unitPeak','unitRms'].forEach(id => {
-    const el = $(id);
-    if (el) el.textContent = u;
-  });
   buildOenormTable();
   renderFromLast();
   drawLive();
 }
 
-// ===================== DRAW LIVE (3 PANELS + Y TICKS) =====================
+// ===================== DRAW (3 Panels + Y-Achse) =====================
 function seriesKindForCharts() {
-  // Hz anzeigen, aber Plot sinnvollerweise auf vel (mm/s)
-  return (activeUnit === 'hz') ? 'vel' : activeUnit;
+  // Jetzt physikalisch korrekt: Hz-Modus plot = hz
+  return activeUnit;
 }
 
 function drawMultiPanel(ctx, kind, source) {
-  // source: ring oder savedData[...]
   const cvs = ctx.canvas;
   const W = cvs.getBoundingClientRect().width || 320;
   const H = cvs.getBoundingClientRect().height || 540;
@@ -423,7 +434,7 @@ function drawMultiPanel(ctx, kind, source) {
       ctx.beginPath(); ctx.moveTo(mL, y0); ctx.lineTo(mL+pw, y0); ctx.stroke();
     }
 
-    // y ticks (min / mid / max)
+    // y ticks
     ctx.fillStyle = '#6c6c74';
     ctx.font = '9px system-ui';
     ctx.textAlign = 'right';
@@ -473,32 +484,22 @@ function drawMultiPanel(ctx, kind, source) {
 function drawLive() {
   if (!liveCtx) return;
   const kind = seriesKindForCharts();
-
   const src = {
     len: ring.len,
     get: (k, axis, i) => {
-      // ring index
       const idx = (ring.ptr - ring.len + i + WINDOW_LEN) % WINDOW_LEN;
       return ring[k][axis][idx];
     }
   };
-
   drawMultiPanel(liveCtx, kind, src);
 }
 
-// ===================== RESULT CHART =====================
 function drawResult(data) {
   if (!resCtx || !data) return;
 
-  const kind = (dom.exportUnit?.value || data.unit || 'vel');
-  const useKind = (kind === 'hz') ? 'vel' : kind; // Hz kann als Plot alternativ vel darstellen
-
-  const src = {
-    len: data.n,
-    get: (k, axis, i) => data[k][axis][i]
-  };
-
-  drawMultiPanel(resCtx, useKind, src);
+  const kind = dom.exportUnit?.value || 'vel';
+  const src = { len: data.n, get: (k, axis, i) => data[k][axis][i] };
+  drawMultiPanel(resCtx, kind, src);
 }
 
 // ===================== SENSOR =====================
@@ -533,12 +534,14 @@ function resetAll() {
   motionEventCount = 0;
 
   ring.ptr = 0; ring.len = 0;
-  ['vel','acc','disp'].forEach(k => {
+  ['vel','acc','disp','hz'].forEach(k => {
     ring[k].x.fill(0); ring[k].y.fill(0); ring[k].z.fill(0); ring[k].t.fill(0);
   });
 
-  freqBuf.ptr = 0; freqBuf.len = 0; freqBuf.t.fill(0);
-  domFreqHz = 0;
+  freqWin.ptr = 0; freqWin.len = 0;
+  freqWin.x.fill(0); freqWin.y.fill(0); freqWin.z.fill(0); freqWin.t.fill(0);
+  hzNow = { x:0, y:0, z:0, t:0 };
+  hzFrameCounter = 0;
 
   hp.x=hp.y=hp.z=0; hp.px=hp.py=hp.pz=0;
   lp.x=lp.y=lp.z=0;
@@ -546,15 +549,24 @@ function resetAll() {
   intg.px=intg.py=intg.pz=0;
   intg.prev=null;
 
-  for (const k of ['vel','acc','disp']) stats[k] = { peak:0, sum2:0, cnt:0 };
-  stats.hz = { peak:0, sum:0, cnt:0 };
+  stats.vel = { peak:0, sum2:0, cnt:0 };
+  stats.acc = { peak:0, sum2:0, cnt:0 };
+  stats.disp= { peak:0, sum2:0, cnt:0 };
+  stats.hz  = { peak:0, sum:0,  cnt:0 };
+
+  last.vel = {x:0,y:0,z:0,t:0,rms:0,peak:0};
+  last.acc = {x:0,y:0,z:0,t:0,rms:0,peak:0};
+  last.disp= {x:0,y:0,z:0,t:0,rms:0,peak:0};
+  last.hz  = {x:0,y:0,z:0,t:0,rms:0,peak:0};
 
   savedData = null;
   rec = null;
 
-  dom.startBtn.textContent = 'Start';
-  dom.startBtn.classList.add('btn--accent');
-  dom.startBtn.classList.remove('btn--stop');
+  if (dom.startBtn) {
+    dom.startBtn.textContent = 'Start';
+    dom.startBtn.classList.add('btn--accent');
+    dom.startBtn.classList.remove('btn--stop');
+  }
 
   dom.results && (dom.results.hidden = true);
   dom.resMeta && (dom.resMeta.textContent = '—');
@@ -589,9 +601,11 @@ function startMeasurement() {
   running = true;
   startTime = Date.now();
 
-  dom.startBtn.textContent = 'Stop';
-  dom.startBtn.classList.remove('btn--accent');
-  dom.startBtn.classList.add('btn--stop');
+  if (dom.startBtn) {
+    dom.startBtn.textContent = 'Stop';
+    dom.startBtn.classList.remove('btn--accent');
+    dom.startBtn.classList.add('btn--stop');
+  }
 
   setStatus('MESSUNG LÄUFT …', 'is-running');
 
@@ -602,7 +616,7 @@ function startMeasurement() {
     vel:{x:[],y:[],z:[],t:[]},
     acc:{x:[],y:[],z:[],t:[]},
     disp:{x:[],y:[],z:[],t:[]},
-    freq:[]
+    hz: {x:[],y:[],z:[],t:[]},
   };
 
   durTimer = setInterval(() => {
@@ -631,9 +645,11 @@ function stopMeasurement() {
 
   setStatus('Messung abgeschlossen ✓', 'is-done');
 
-  dom.startBtn.textContent = 'Start';
-  dom.startBtn.classList.add('btn--accent');
-  dom.startBtn.classList.remove('btn--stop');
+  if (dom.startBtn) {
+    dom.startBtn.textContent = 'Start';
+    dom.startBtn.classList.add('btn--accent');
+    dom.startBtn.classList.remove('btn--stop');
+  }
 
   if (rec && rec.vel.t.length > 10) {
     const durationSec = (performance.now() - rec.t0) / 1000;
@@ -643,8 +659,7 @@ function stopMeasurement() {
       startTs: rec.startTs,
       durationSec,
       filter: rec.filter,
-      vel: rec.vel, acc: rec.acc, disp: rec.disp,
-      freq: rec.freq,
+      vel: rec.vel, acc: rec.acc, disp: rec.disp, hz: rec.hz,
     };
 
     if (dom.results) dom.results.hidden = false;
@@ -656,7 +671,6 @@ function stopMeasurement() {
     }
 
     if (dom.exportUnit) dom.exportUnit.value = activeUnit;
-
     setTimeout(() => { initCanvases(); drawResult(savedData); }, 120);
   }
 
@@ -691,24 +705,36 @@ function loop() {
   const dispZ = intg.pz * 1000;
   const dispT = Math.sqrt(dispX*dispX + dispY*dispY + dispZ*dispZ);
 
-  // freq buffer uses velT
-  freqBuf.t[freqBuf.ptr] = velT;
-  freqBuf.ptr = (freqBuf.ptr + 1) % FREQ_WIN;
-  if (freqBuf.len < FREQ_WIN) freqBuf.len++;
+  // --- Frequenzfenster befüllen (aus vel) ---
+  freqWin.x[freqWin.ptr] = velX;
+  freqWin.y[freqWin.ptr] = velY;
+  freqWin.z[freqWin.ptr] = velZ;
+  freqWin.t[freqWin.ptr] = velT;
+  freqWin.ptr = (freqWin.ptr + 1) % FREQ_WIN;
+  if (freqWin.len < FREQ_WIN) freqWin.len++;
 
-  if (ring.ptr % 30 === 0) domFreqHz = estimateFrequencyHz();
-  stats.hz.peak = Math.max(stats.hz.peak, domFreqHz);
-  stats.hz.sum += domFreqHz; stats.hz.cnt++;
+  // --- Hz schätzen (nicht jedes Frame, sonst unnötig) ---
+  hzFrameCounter++;
+  if (hzFrameCounter >= FREQ_UPDATE_EVERY_N_FRAMES) {
+    hzFrameCounter = 0;
+    hzNow = {
+      x: estimateHzFromWindow(freqWin.x, freqWin.len, freqWin.ptr),
+      y: estimateHzFromWindow(freqWin.y, freqWin.len, freqWin.ptr),
+      z: estimateHzFromWindow(freqWin.z, freqWin.len, freqWin.ptr),
+      t: estimateHzFromWindow(freqWin.t, freqWin.len, freqWin.ptr),
+    };
+  }
 
-  // ring store
+  // --- Ringbuffer schreiben (ALLE Einheiten parallel) ---
   ring.acc.x[ring.ptr]=accX; ring.acc.y[ring.ptr]=accY; ring.acc.z[ring.ptr]=accZ; ring.acc.t[ring.ptr]=accT;
   ring.vel.x[ring.ptr]=velX; ring.vel.y[ring.ptr]=velY; ring.vel.z[ring.ptr]=velZ; ring.vel.t[ring.ptr]=velT;
   ring.disp.x[ring.ptr]=dispX; ring.disp.y[ring.ptr]=dispY; ring.disp.z[ring.ptr]=dispZ; ring.disp.t[ring.ptr]=dispT;
+  ring.hz.x[ring.ptr]=hzNow.x; ring.hz.y[ring.ptr]=hzNow.y; ring.hz.z[ring.ptr]=hzNow.z; ring.hz.t[ring.ptr]=hzNow.t;
 
   ring.ptr = (ring.ptr + 1) % WINDOW_LEN;
   if (ring.len < WINDOW_LEN) ring.len++;
 
-  // stats per unit
+  // --- Stats (Peak/RMS) pro Einheit ---
   stats.vel.peak = Math.max(stats.vel.peak, velT);
   stats.vel.sum2 += velT*velT; stats.vel.cnt++;
 
@@ -718,17 +744,19 @@ function loop() {
   stats.disp.peak = Math.max(stats.disp.peak, dispT);
   stats.disp.sum2 += dispT*dispT; stats.disp.cnt++;
 
-  // last packs (parallel!)
+  stats.hz.peak = Math.max(stats.hz.peak, hzNow.t);
+  stats.hz.sum += hzNow.t; stats.hz.cnt++;
+
+  // --- last packs (Anzeige) ---
   last.vel = { x:velX, y:velY, z:velZ, t:velT, peak:stats.vel.peak, rms:Math.sqrt(stats.vel.sum2/Math.max(1,stats.vel.cnt)) };
   last.acc = { x:accX, y:accY, z:accZ, t:accT, peak:stats.acc.peak, rms:Math.sqrt(stats.acc.sum2/Math.max(1,stats.acc.cnt)) };
   last.disp= { x:dispX,y:dispY,z:dispZ,t:dispT,peak:stats.disp.peak,rms:Math.sqrt(stats.disp.sum2/Math.max(1,stats.disp.cnt)) };
-  last.hz  = { t:domFreqHz, peak:stats.hz.peak, rms:(stats.hz.sum/Math.max(1,stats.hz.cnt)) };
-
-  // freq display always
-  if (dom.freqVal) dom.freqVal.textContent = domFreqHz ? domFreqHz.toFixed(1) : '—';
+  last.hz  = { x:hzNow.x, y:hzNow.y, z:hzNow.z, t:hzNow.t, peak:stats.hz.peak, rms:(stats.hz.sum/Math.max(1,stats.hz.cnt)) };
 
   renderFromLast();
   drawLive();
+
+  if (dom.filterLabel) dom.filterLabel.textContent = FILTERS[activeFilter]?.label || activeFilter;
 
   if (dom.debugPanel) {
     dom.debugPanel.textContent =
@@ -736,15 +764,16 @@ function loop() {
       `acc fx=${accX.toFixed(3)} fy=${accY.toFixed(3)} fz=${accZ.toFixed(3)} m/s² | filter=${activeFilter}\n` +
       `vel x=${velX.toFixed(2)} y=${velY.toFixed(2)} z=${velZ.toFixed(2)} total=${velT.toFixed(2)} mm/s\n` +
       `disp x=${dispX.toFixed(3)} y=${dispY.toFixed(3)} z=${dispZ.toFixed(3)} total=${dispT.toFixed(3)} mm\n` +
-      `freq=${domFreqHz.toFixed(1)} Hz | dt=${(dt*1000).toFixed(1)} ms`;
+      `hz  fx=${hzNow.x.toFixed(2)} fy=${hzNow.y.toFixed(2)} fz=${hzNow.z.toFixed(2)} ft=${hzNow.t.toFixed(2)} Hz\n` +
+      `dt=${(dt*1000).toFixed(1)} ms`;
   }
 
-  // record for export
+  // --- Recording (für Export) ---
   if (rec && rec.vel.t.length < 12000) {
     rec.vel.x.push(velX); rec.vel.y.push(velY); rec.vel.z.push(velZ); rec.vel.t.push(velT);
     rec.acc.x.push(accX); rec.acc.y.push(accY); rec.acc.z.push(accZ); rec.acc.t.push(accT);
     rec.disp.x.push(dispX); rec.disp.y.push(dispY); rec.disp.z.push(dispZ); rec.disp.t.push(dispT);
-    rec.freq.push(domFreqHz);
+    rec.hz.x.push(hzNow.x); rec.hz.y.push(hzNow.y); rec.hz.z.push(hzNow.z); rec.hz.t.push(hzNow.t);
   }
 }
 
@@ -759,11 +788,9 @@ document.querySelectorAll('.unitBtn').forEach(btn => {
 
 dom.filterSelect?.addEventListener('change', () => {
   activeFilter = dom.filterSelect.value;
-
-  // reset filter state (sauber)
+  // reset filter state
   hp.x=hp.y=hp.z=0; hp.px=hp.py=hp.pz=0;
   lp.x=lp.y=lp.z=0;
-
   if (dom.filterLabel) dom.filterLabel.textContent = FILTERS[activeFilter]?.label || activeFilter;
 });
 
@@ -786,19 +813,11 @@ function exportCSV() {
   csv += `# Filter: ${FILTERS[savedData.filter]?.label || savedData.filter}\n`;
   csv += `# Einheit: ${expUnit} (${unitLabel(expUnit)})\n#\n`;
 
-  if (expUnit === 'hz') {
-    csv += `i;time_s;freq_Hz\n`;
-    for (let i=0;i<n;i++) {
-      csv += `${i};${(i*dt).toFixed(4)};${(savedData.freq[i]||0).toFixed(3)}\n`;
-    }
-  } else {
-    const src = savedData[expUnit];
-    csv += `i;time_s;x_${unitLabel(expUnit)};y_${unitLabel(expUnit)};z_${unitLabel(expUnit)};total_${unitLabel(expUnit)};freq_Hz\n`;
-    for (let i=0;i<n;i++) {
-      csv += `${i};${(i*dt).toFixed(4)};` +
-        `${src.x[i].toFixed(6)};${src.y[i].toFixed(6)};${src.z[i].toFixed(6)};${src.t[i].toFixed(6)};` +
-        `${(savedData.freq[i]||0).toFixed(3)}\n`;
-    }
+  const src = savedData[expUnit];
+  csv += `i;time_s;x_${unitLabel(expUnit)};y_${unitLabel(expUnit)};z_${unitLabel(expUnit)};total_${unitLabel(expUnit)}\n`;
+  for (let i=0;i<n;i++) {
+    csv += `${i};${(i*dt).toFixed(4)};` +
+      `${src.x[i].toFixed(6)};${src.y[i].toFixed(6)};${src.z[i].toFixed(6)};${src.t[i].toFixed(6)}\n`;
   }
 
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
@@ -811,7 +830,7 @@ function exportCSV() {
 }
 dom.csvBtn?.addEventListener('click', exportCSV);
 
-// ===================== EXPORT PDF =====================
+// ===================== EXPORT PDF (jetzt auch für Hz) =====================
 function plotToDataURL({ series, title, unit, color, durationSec }) {
   const W = 1200, H = 260;
   const mL = 74, mR = 18, mT = 30, mB = 50;
@@ -821,11 +840,9 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
-  // background
   ctx.fillStyle = '#fff';
   ctx.fillRect(0,0,W,H);
 
-  // min/max
   let mn = Infinity, mx = -Infinity;
   for (const v of series) { if (v < mn) mn = v; if (v > mx) mx = v; }
   if (!isFinite(mn) || !isFinite(mx)) { mn = -1; mx = 1; }
@@ -835,7 +852,6 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
 
   const yOf = (v) => mT + ph - ((v - mn) / (mx - mn)) * ph;
 
-  // grid
   ctx.strokeStyle = '#e6e6e6';
   ctx.lineWidth = 1;
   for (let i=0;i<=10;i++){
@@ -847,24 +863,20 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
     ctx.beginPath(); ctx.moveTo(mL,y); ctx.lineTo(mL+pw,y); ctx.stroke();
   }
 
-  // axes
   ctx.strokeStyle = '#111';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.moveTo(mL,mT); ctx.lineTo(mL,mT+ph); ctx.lineTo(mL+pw,mT+ph);
   ctx.stroke();
 
-  // title
   ctx.fillStyle = '#111';
   ctx.font = 'bold 14px Arial';
   ctx.fillText(title, mL, 18);
 
-  // unit
   ctx.fillStyle = '#333';
   ctx.font = '12px Arial';
   ctx.fillText(unit, 12, mT+12);
 
-  // y ticks
   ctx.fillStyle = '#333';
   ctx.font = '11px Arial';
   for (let j=0;j<=6;j++){
@@ -873,7 +885,6 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
     ctx.fillText(vv.toFixed(3), 10, yy+4);
   }
 
-  // x ticks
   ctx.textAlign = 'center';
   ctx.fillStyle = '#333';
   for (let i=0;i<=5;i++){
@@ -884,7 +895,6 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
   ctx.textAlign = 'left';
   ctx.fillText('t [s]', mL+pw-38, H-4);
 
-  // line
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -906,11 +916,6 @@ function exportPDF() {
   }
 
   const expUnit = dom.exportUnit ? dom.exportUnit.value : 'vel';
-  if (expUnit === 'hz') {
-    setStatus('PDF für Hz ist derzeit deaktiviert (CSV möglich).', 'is-error');
-    return;
-  }
-
   const unit = unitLabel(expUnit);
   const dur = savedData.durationSec;
   const src = savedData[expUnit];
@@ -983,7 +988,6 @@ if (IS_IOS &&
   let deferredPrompt = null;
 
   if (!dom.installBanner || !dom.installBtn) return;
-
   if (IS_STANDALONE) { dom.installBanner.hidden = true; return; }
 
   if (IS_IOS) {
@@ -1032,7 +1036,6 @@ if ('serviceWorker' in navigator) {
 
 // ===================== INIT =====================
 initTabs();
-
 if (dom.filterLabel) dom.filterLabel.textContent = FILTERS[activeFilter]?.label || activeFilter;
 
 buildOenormTable();
