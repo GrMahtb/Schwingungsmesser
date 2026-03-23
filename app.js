@@ -1,186 +1,150 @@
 'use strict';
 
-/* ══════════════════════════════════════════════
-   KONFIGURATION
-══════════════════════════════════════════════ */
-const SAMPLE_RATE  = 60;               // Ziel-fps ≈ Sensor-Rate
-const WIN_SEC      = 30;               // Rückblick-Fenster Sekunden
-const WINDOW_LEN   = WIN_SEC * SAMPLE_RATE; // 1800 Samples
-const MAX_REC      = WINDOW_LEN * 4;        // max. 2 min Recording
-const FREQ_WIN_SEC = 2;               // Fenster für Zero-Crossing Hz-Schätzung
-const FREQ_WIN     = FREQ_WIN_SEC * SAMPLE_RATE;
+/* =========================
+   KONFIG
+========================= */
+const SAMPLE_RATE = 60;          // Zielwert (Sensor ist nicht exakt konstant)
+const WIN_SEC = 30;
+const WINDOW_LEN = WIN_SEC * SAMPLE_RATE; // 1800
+const FREQ_WIN_SEC = 2;
+const FREQ_WIN = FREQ_WIN_SEC * SAMPLE_RATE;
 
 const COLORS = { x:'#ff4444', y:'#00cc66', z:'#4499ff' };
 
-/* ══════════════════════════════════════════════
-   FILTER-DEFINITIONEN
-   IIR 1. Ordnung: HP + LP hintereinander
-   Koeffizienten für fs = 60 Hz
-   alpha = exp(-2π·fc/fs)
-══════════════════════════════════════════════ */
+// simple Leaks gegen Drift
+const LEAK_V = 0.985;
+const LEAK_P = 0.995;
+
+/* =========================
+   FILTER PRESETS
+   hpAlpha: 0 => aus, sonst 1st-order Highpass
+   lpAlpha: 1 => aus, sonst 1st-order Lowpass y=a*y+(1-a)*x
+========================= */
 const FILTERS = {
-  raw:   { hpAlpha: 0,     lpAlpha: 1,    label: 'Roh'                },
-  hp1:   { hpAlpha: 0.900, lpAlpha: 1,    label: 'HP 1 Hz'            },
-  bau:   { hpAlpha: 0.900, lpAlpha: 0.22, label: 'Baustelle 1–25 Hz'  },
-  pfahl: { hpAlpha: 0.900, lpAlpha: 0.57, label: 'Pfahlramm. 1–8 Hz'  },
-  verd:  { hpAlpha: 0.583, lpAlpha: 0.22, label: 'Verdichter 8–25 Hz' },
-  verk:  { hpAlpha: 0.900, lpAlpha: 0.38, label: 'Verkehr 1–15 Hz'    },
+  raw:   { hpAlpha: 0.000, lpAlpha: 1.000, label:'Roh (kein Filter)' },
+  hp1:   { hpAlpha: 0.900, lpAlpha: 1.000, label:'HP 1 Hz (Standard)' },
+  bau:   { hpAlpha: 0.900, lpAlpha: 0.220, label:'Baustelle 1–25 Hz' },
+  pfahl: { hpAlpha: 0.900, lpAlpha: 0.570, label:'Pfahlrammung 1–8 Hz' },
+  verd:  { hpAlpha: 0.583, lpAlpha: 0.220, label:'Verdichter 8–25 Hz' },
+  verk:  { hpAlpha: 0.900, lpAlpha: 0.380, label:'Verkehr 1–15 Hz' },
 };
 
-/* ══════════════════════════════════════════════
-   ÖNORM S 9020 – Definitionen je Einheit
-══════════════════════════════════════════════ */
 const OENORM = {
   vel: {
-    hint: 'Spitzenpartikelgeschwindigkeit (PPV) in mm/s – direkte Norm-Grundlage',
-    rows: [
-      { id:'n0', range:'< 5 mm/s',      label:'Klasse I – keine Schäden zu erwarten'         },
-      { id:'n1', range:'5 – 10 mm/s',   label:'Klasse II – leichte kosmetische Schäden mgl.' },
-      { id:'n2', range:'10 – 20 mm/s',  label:'Klasse III – leichte Schäden möglich'          },
-      { id:'n3', range:'20 – 30 mm/s',  label:'Klasse IV – mittlere Schäden möglich'          },
-      { id:'n4', range:'> 30 mm/s',     label:'Klasse V – schwere Schäden möglich'            },
-    ],
+    hint: 'ÖNORM basiert auf Spitzenpartikelgeschwindigkeit (PPV) in mm/s.',
     bounds: [0, 5, 10, 20, 30],
+    rows: [
+      { id:'n0', range:'< 5 mm/s',     label:'Klasse I – keine Schäden zu erwarten' },
+      { id:'n1', range:'5 – 10 mm/s',  label:'Klasse II – leichte kosmetische Schäden möglich' },
+      { id:'n2', range:'10 – 20 mm/s', label:'Klasse III – leichte Schäden möglich' },
+      { id:'n3', range:'20 – 30 mm/s', label:'Klasse IV – mittlere Schäden möglich' },
+      { id:'n4', range:'> 30 mm/s',    label:'Klasse V – schwere Schäden möglich' },
+    ]
   },
   acc: {
-    hint: 'Beschleunigung m/s² – Richtwerte aus PPV bei Annahme f = 10 Hz (orientierend)',
-    rows: [
-      { id:'n0', range:'< 0.31 m/s²',   label:'Klasse I – keine Schäden zu erwarten'         },
-      { id:'n1', range:'0.31 – 0.63 m/s²', label:'Klasse II – leichte kosm. Schäden mgl.'  },
-      { id:'n2', range:'0.63 – 1.26 m/s²', label:'Klasse III – leichte Schäden möglich'     },
-      { id:'n3', range:'1.26 – 1.88 m/s²', label:'Klasse IV – mittlere Schäden möglich'     },
-      { id:'n4', range:'> 1.88 m/s²',   label:'Klasse V – schwere Schäden möglich'           },
-    ],
+    hint: 'm/s²: Richtwerte (orientierend) aus mm/s bei Annahme f=10 Hz.',
     bounds: [0, 0.314, 0.628, 1.257, 1.885],
-    // a = v·2πf, v=5/10/20/30 mm/s = 0.005/0.01/0.02/0.03 m/s, f=10Hz
+    rows: [
+      { id:'n0', range:'< 0.31 m/s²',        label:'Klasse I – keine Schäden zu erwarten' },
+      { id:'n1', range:'0.31 – 0.63 m/s²',   label:'Klasse II – leichte kosmetische Schäden möglich' },
+      { id:'n2', range:'0.63 – 1.26 m/s²',   label:'Klasse III – leichte Schäden möglich' },
+      { id:'n3', range:'1.26 – 1.89 m/s²',   label:'Klasse IV – mittlere Schäden möglich' },
+      { id:'n4', range:'> 1.89 m/s²',        label:'Klasse V – schwere Schäden möglich' },
+    ]
   },
   disp: {
-    hint: 'Verschiebung mm – Richtwerte aus PPV bei Annahme f = 10 Hz (orientierend)',
-    rows: [
-      { id:'n0', range:'< 0.080 mm',    label:'Klasse I – keine Schäden zu erwarten'         },
-      { id:'n1', range:'0.080 – 0.159 mm', label:'Klasse II – leichte kosm. Schäden mgl.'  },
-      { id:'n2', range:'0.159 – 0.318 mm', label:'Klasse III – leichte Schäden möglich'     },
-      { id:'n3', range:'0.318 – 0.477 mm', label:'Klasse IV – mittlere Schäden möglich'     },
-      { id:'n4', range:'> 0.477 mm',    label:'Klasse V – schwere Schäden möglich'           },
-    ],
+    hint: 'mm: Richtwerte (orientierend) aus mm/s bei Annahme f=10 Hz.',
     bounds: [0, 0.0796, 0.1592, 0.3183, 0.4775],
-    // d = v/(2πf), v=0.005/0.01/0.02/0.03 m/s, f=10Hz → ×1000 mm
+    rows: [
+      { id:'n0', range:'< 0.080 mm',       label:'Klasse I – keine Schäden zu erwarten' },
+      { id:'n1', range:'0.080 – 0.159 mm', label:'Klasse II – leichte kosmetische Schäden möglich' },
+      { id:'n2', range:'0.159 – 0.318 mm', label:'Klasse III – leichte Schäden möglich' },
+      { id:'n3', range:'0.318 – 0.478 mm', label:'Klasse IV – mittlere Schäden möglich' },
+      { id:'n4', range:'> 0.478 mm',       label:'Klasse V – schwere Schäden möglich' },
+    ]
   },
   hz: {
-    hint: 'Dominante Frequenz Hz – Baustellentypische Quellen (ÖNORM gilt für Geschwindigkeit)',
+    hint: 'Hz: dominante Frequenz (Zero-Crossing) – zur Plausibilisierung (ÖNORM gilt für mm/s).',
+    bounds: null,
     rows: [
-      { id:'n0', range:'1 – 8 Hz',      label:'Typisch: Pfahlrammung, langsame Erschütt.'    },
-      { id:'n1', range:'2 – 15 Hz',     label:'Typisch: Bagger, Abbruch, Schwerlastverkehr'  },
-      { id:'n2', range:'8 – 25 Hz',     label:'Typisch: Verdichter, Rüttelplatte, Compactor' },
-      { id:'n3', range:'> 25 Hz',       label:'Rauschen / Sensor-Artefakt (kein Baustellenwert)' },
-      { id:'n4', range:'< 1 Hz',        label:'Unterhalb Messbereich / DC-Drift'              },
-    ],
-    bounds: null, // Frequenz hat andere Logik
-  },
+      { id:'n0', range:'1 – 8 Hz',  label:'Typisch: Pfahlrammung / langsame Erschütterung' },
+      { id:'n1', range:'2 – 15 Hz', label:'Typisch: Bagger, Abbruch, Schwerlast-Verkehr' },
+      { id:'n2', range:'8 – 25 Hz', label:'Typisch: Verdichter / Rüttelplatte' },
+      { id:'n3', range:'> 25 Hz',   label:'Oft Rauschen/Sensor (baustellen-untypisch bei 60fps)' },
+      { id:'n4', range:'< 1 Hz',    label:'DC/Drift (nicht als Schwingung interpretieren)' },
+    ]
+  }
 };
 
-/* ══════════════════════════════════════════════
-   ZUSTAND
-══════════════════════════════════════════════ */
-let running          = false;
-let startTime        = null;
-let durTimer         = null;
-let rafId            = null;
-let savedData        = null;
-let rec              = null;
-let activeUnit       = 'vel';
-let activeFilter     = 'hp1';
-let noDataTimer      = null;
-let motionEventCount = 0;
-let rawX = 0, rawY = 0, rawZ = 0;
-
-// Zirkulärer Buffer für Live-Anzeige (gefiltertes Signal)
-const buf = {
-  x:   new Float32Array(WINDOW_LEN),
-  y:   new Float32Array(WINDOW_LEN),
-  z:   new Float32Array(WINDOW_LEN),
-  t:   new Float32Array(WINDOW_LEN),
-  ptr: 0, len: 0
-};
-
-// Frequenz-Schätzung: kleine Buffer für Zero-Crossing
-const freqBuf = {
-  t: new Float32Array(FREQ_WIN),
-  ptr: 0, len: 0,
-};
-
-// Integration & Filter-Zustand
-const intg = { vx:0, vy:0, vz:0, px:0, py:0, pz:0, prev:null };
-const hp   = { x:0, y:0, z:0, px:0, py:0, pz:0 };       // Hochpass
-const lp   = { x:0, y:0, z:0 };                           // Tiefpass
-
-let peakTotal = 0, rmsAcc = 0, rmsCnt = 0;
-let domFreqHz = 0;
-
-/* ══════════════════════════════════════════════
-   iOS & STANDALONE ERKENNUNG
-══════════════════════════════════════════════ */
+/* =========================
+   iOS / Standalone
+========================= */
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent);
 const IS_STANDALONE =
   window.matchMedia('(display-mode: standalone)').matches ||
   navigator.standalone === true;
 
-/* ══════════════════════════════════════════════
-   DOM-REFERENZEN
-══════════════════════════════════════════════ */
+/* =========================
+   DOM
+========================= */
 const $ = (id) => document.getElementById(id);
-
 const dom = {
-  statusBar:    $('statusBar'),
-  mainNum:      $('mainNum'),
-  mainSub:      $('mainSub'),
-  xVal:         $('xVal'),
-  yVal:         $('yVal'),
-  zVal:         $('zVal'),
-  tVal:         $('tVal'),
-  peakVal:      $('peakVal'),
-  rmsVal:       $('rmsVal'),
-  freqVal:      $('freqVal'),
-  durVal:       $('durVal'),
-  debugPanel:   $('debugPanel'),
-  liveChart:    $('liveChart'),
-  liveAxis:     $('liveAxis'),
-  resultChart:  $('resultChart'),
-  resAxis:      $('resAxis'),
-  resMeta:      $('resMeta'),
-  results:      $('results'),
-  startBtn:     $('startBtn'),
-  resetBtn:     $('resetBtn'),
-  iosPermBtn:   $('iosPermBtn'),
-  installBanner:$('installBanner'),
-  installBtn:   $('installBtn'),
-  exportUnit:   $('exportUnit'),
+  statusBar: $('statusBar'),
+
+  // tabs/panes
+  panes: () => document.querySelectorAll('.pane'),
+  tabs:  () => document.querySelectorAll('.tab'),
+
+  // controls
+  startBtn: $('startBtn'),
+  resetBtn: $('resetBtn'),
+  iosPermBtn: $('iosPermBtn'),
   filterSelect: $('filterSelect'),
-  oenormTable:  $('oenormTable'),
-  oenormHint:   $('oenormUnitHint'),
+
+  // unit buttons
+  unitBtns: () => document.querySelectorAll('.unitBtn'),
+
+  // values
+  mainNum: $('mainNum'),
+  mainSub: $('mainSub'),
+  xVal: $('xVal'), yVal: $('yVal'), zVal: $('zVal'), tVal: $('tVal'),
+  peakVal: $('peakVal'), rmsVal: $('rmsVal'),
+  freqVal: $('freqVal'),
+  durVal: $('durVal'),
+
+  // charts
+  liveChart: $('liveChart'),
+  resultChart: $('resultChart'),
+
+  // debug
+  debugPanel: $('debugPanel'),
+
+  // oenorm
+  oenormHint: $('oenormUnitHint'),
+  oenormTable: $('oenormTable'),
+
+  // results/export
+  results: $('results'),
+  resMeta: $('resMeta'),
+  exportUnit: $('exportUnit'),
+  csvBtn: $('csvBtn'),
+
+  // pwa
+  installBanner: $('installBanner'),
+  installBtn: $('installBtn'),
 };
 
 const liveCtx = dom.liveChart.getContext('2d');
 const resCtx  = dom.resultChart.getContext('2d');
 
-/* ══════════════════════════════════════════════
-   FEHLER-HANDLER
-══════════════════════════════════════════════ */
-window.addEventListener('error', (e) => {
-  dom.statusBar.hidden    = false;
-  dom.statusBar.className = 'statusBar is-error';
-  dom.statusBar.textContent = `JS Fehler: ${e.message} (Zeile ${e.lineno})`;
-});
-
-/* ══════════════════════════════════════════════
-   HELPER
-══════════════════════════════════════════════ */
-function unitLabel(u) {
-  u = u || activeUnit;
-  if (u === 'acc')  return 'm/s²';
-  if (u === 'disp') return 'mm';
-  if (u === 'hz')   return 'Hz';
-  return 'mm/s';
+/* =========================
+   STATUS
+========================= */
+function setStatus(msg, cls) {
+  if (!dom.statusBar) return;
+  dom.statusBar.textContent = msg || '';
+  dom.statusBar.className = 'statusBar' + (cls ? ' ' + cls : '');
+  dom.statusBar.hidden = !msg;
 }
 
 function fmtTime(ms) {
@@ -189,15 +153,17 @@ function fmtTime(ms) {
   return `${mm}:${ss}`;
 }
 
-function setStatus(msg, cls) {
-  dom.statusBar.textContent = msg;
-  dom.statusBar.className   = 'statusBar' + (cls ? ' ' + cls : '');
-  dom.statusBar.hidden      = !msg;
+function unitLabel(u) {
+  u = u || activeUnit;
+  if (u === 'acc') return 'm/s²';
+  if (u === 'disp') return 'mm';
+  if (u === 'hz') return 'Hz';
+  return 'mm/s';
 }
 
-/* ══════════════════════════════════════════════
+/* =========================
    CANVAS RESIZE
-══════════════════════════════════════════════ */
+========================= */
 function resizeCanvas(cvs) {
   const dpr  = window.devicePixelRatio || 1;
   const rect = cvs.getBoundingClientRect();
@@ -213,84 +179,61 @@ function initCanvases() {
   drawLive();
   if (savedData) drawResult(savedData);
 }
+window.addEventListener('resize', () => setTimeout(initCanvases, 50));
 
-window.addEventListener('resize', initCanvases);
-setTimeout(initCanvases, 150);
-
-/* ══════════════════════════════════════════════
-   TABS
-══════════════════════════════════════════════ */
-document.querySelectorAll('.tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(b =>
-      b.classList.toggle('is-active', b === btn)
-    );
-    document.querySelectorAll('.pane').forEach(p => {
-      const on = (p.id === `tab-${btn.dataset.tab}`);
-      p.classList.toggle('is-active', on);
-      p.hidden = !on;
+/* =========================
+   TABS (Click Handler)
+========================= */
+function initTabs() {
+  dom.tabs().forEach(btn => {
+    btn.addEventListener('click', () => {
+      dom.tabs().forEach(b => b.classList.toggle('is-active', b === btn));
+      dom.panes().forEach(p => {
+        const on = (p.id === `tab-${btn.dataset.tab}`);
+        p.classList.toggle('is-active', on);
+        p.hidden = !on;
+      });
+      setTimeout(initCanvases, 80);
     });
-    setTimeout(initCanvases, 60);
   });
-});
-
-/* ══════════════════════════════════════════════
-   FILTER-AUSWAHL
-══════════════════════════════════════════════ */
-dom.filterSelect.addEventListener('change', () => {
-  activeFilter = dom.filterSelect.value;
-  // Filter-Zustand zurücksetzen (verhindert Sprünge)
-  hp.x = hp.y = hp.z = 0; hp.px = hp.py = hp.pz = 0;
-  lp.x = lp.y = lp.z = 0;
-});
-
-/* ══════════════════════════════════════════════
-   EINHEIT
-══════════════════════════════════════════════ */
-function updateUnitLabels() {
-  const u = unitLabel();
-  ['unitX','unitY','unitZ','unitT','unitPeak','unitRms'].forEach(id => {
-    const el = $(id); if (el) el.textContent = u;
-  });
-  dom.mainSub.textContent = `${u} (Total)`;
-  buildOenormTable();
 }
 
-document.querySelectorAll('.unitBtn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    activeUnit = btn.dataset.unit;
-    document.querySelectorAll('.unitBtn').forEach(b =>
-      b.classList.toggle('is-active', b === btn)
-    );
-    updateUnitLabels();
-  });
-});
-
-/* ══════════════════════════════════════════════
-   ÖNORM-TABELLE AUFBAUEN (je Einheit)
-══════════════════════════════════════════════ */
+/* =========================
+   ÖNORM table
+========================= */
 function buildOenormTable() {
   const cfg = OENORM[activeUnit] || OENORM.vel;
-  dom.oenormHint.textContent = cfg.hint;
+  if (dom.oenormHint) dom.oenormHint.textContent = cfg.hint;
 
   let html = '<tbody>';
-  cfg.rows.forEach(r => {
-    html += `<tr id="${r.id}"><td>${r.range}</td><td>${r.label}</td></tr>`;
-  });
+  cfg.rows.forEach(r => html += `<tr id="${r.id}"><td>${r.range}</td><td>${r.label}</td></tr>`);
   html += '</tbody>';
-  dom.oenormTable.innerHTML = html;
+  if (dom.oenormTable) dom.oenormTable.innerHTML = html;
 }
 
-function updateOenorm(value) {
+function updateOenormHighlight(val) {
   const cfg = OENORM[activeUnit] || OENORM.vel;
+  if (!cfg) return;
+
+  // Hz special
   if (!cfg.bounds) {
-    // Hz-Modus: Frequenz-Klassifizierung
-    highlightFreqRow(value);
+    let activeId = null;
+    if (val < 1) activeId = 'n4';
+    else if (val <= 8) activeId = 'n0';
+    else if (val <= 15) activeId = 'n1';
+    else if (val <= 25) activeId = 'n2';
+    else activeId = 'n3';
+
+    cfg.rows.forEach(r => {
+      const el = $(r.id);
+      if (el) el.classList.toggle('is-active', r.id === activeId);
+    });
     return;
   }
+
   let row = 0;
   for (let i = cfg.bounds.length - 1; i >= 0; i--) {
-    if (value >= cfg.bounds[i]) { row = i; break; }
+    if (val >= cfg.bounds[i]) { row = i; break; }
   }
   cfg.rows.forEach((r, i) => {
     const el = $(r.id);
@@ -298,63 +241,77 @@ function updateOenorm(value) {
   });
 }
 
-function highlightFreqRow(hz) {
-  // n0 = 1–8, n1 = 2–15, n2 = 8–25, n3 = >25, n4 = <1
-  const rows = OENORM.hz.rows;
-  let activeId = null;
-  if (hz < 1)      activeId = 'n4';
-  else if (hz <= 8)  activeId = 'n0';
-  else if (hz <= 15) activeId = 'n1';
-  else if (hz <= 25) activeId = 'n2';
-  else               activeId = 'n3';
+/* =========================
+   STATE
+========================= */
+let running = false;
+let startTime = null;
+let rafId = null;
+let durTimer = null;
+let noDataTimer = null;
 
-  rows.forEach(r => {
-    const el = $(r.id);
-    if (el) el.classList.toggle('is-active', r.id === activeId);
-  });
-}
+let activeUnit = 'vel';
+let activeFilter = 'hp1';
 
-/* ══════════════════════════════════════════════
-   FILTER ANWENDEN
-   Gibt gefilterte Beschleunigung zurück (m/s²)
-══════════════════════════════════════════════ */
+let motionEventCount = 0;
+let rawX = 0, rawY = 0, rawZ = 0;
+
+// filter state
+const hp = { x:0, y:0, z:0, px:0, py:0, pz:0 };
+const lp = { x:0, y:0, z:0 };
+
+// integrator
+const intg = { vx:0, vy:0, vz:0, px:0, py:0, pz:0, prev:null };
+
+// buffers (wir speichern alle Einheiten parallel, damit Anzeige/Export stabil ist)
+const buf = {
+  ptr: 0, len: 0,
+  vel: { x:new Float32Array(WINDOW_LEN), y:new Float32Array(WINDOW_LEN), z:new Float32Array(WINDOW_LEN), t:new Float32Array(WINDOW_LEN) },
+  acc: { x:new Float32Array(WINDOW_LEN), y:new Float32Array(WINDOW_LEN), z:new Float32Array(WINDOW_LEN), t:new Float32Array(WINDOW_LEN) },
+  disp:{ x:new Float32Array(WINDOW_LEN), y:new Float32Array(WINDOW_LEN), z:new Float32Array(WINDOW_LEN), t:new Float32Array(WINDOW_LEN) },
+};
+
+const freqBuf = { t:new Float32Array(FREQ_WIN), ptr:0, len:0 };
+let domFreqHz = 0;
+
+// peaks / rms pro Einheit (Total)
+const stats = {
+  vel:  { peak:0, sum2:0, cnt:0 },
+  acc:  { peak:0, sum2:0, cnt:0 },
+  disp: { peak:0, sum2:0, cnt:0 },
+  hz:   { peak:0, sum:0,  cnt:0 },
+};
+
+let savedData = null;
+let rec = null;
+
+/* =========================
+   FILTER + INTEGRATION
+========================= */
 function applyFilter(ax, ay, az) {
   const cfg = FILTERS[activeFilter] || FILTERS.hp1;
 
-  // 1. Hochpass (entfernt DC/Gravitation)
-  let hpx, hpy, hpz;
-  if (cfg.hpAlpha === 0) {
-    // Roh: kein HP
-    hpx = ax; hpy = ay; hpz = az;
+  // highpass
+  let fx, fy, fz;
+  if (cfg.hpAlpha <= 0.0001) {
+    fx = ax; fy = ay; fz = az;
   } else {
-    hpx = cfg.hpAlpha * (hp.x + ax - hp.px);
-    hpy = cfg.hpAlpha * (hp.y + ay - hp.py);
-    hpz = cfg.hpAlpha * (hp.z + az - hp.pz);
-    hp.x = hpx; hp.y = hpy; hp.z = hpz;
+    fx = cfg.hpAlpha * (hp.x + ax - hp.px);
+    fy = cfg.hpAlpha * (hp.y + ay - hp.py);
+    fz = cfg.hpAlpha * (hp.z + az - hp.pz);
+    hp.x = fx; hp.y = fy; hp.z = fz;
     hp.px = ax; hp.py = ay; hp.pz = az;
   }
 
-  // 2. Tiefpass (entfernt hochfrequentes Rauschen)
-  let fx, fy, fz;
-  if (cfg.lpAlpha >= 1) {
-    // Kein LP
-    fx = hpx; fy = hpy; fz = hpz;
-  } else {
-    const a = cfg.lpAlpha;
-    lp.x = a * lp.x + (1 - a) * hpx;
-    lp.y = a * lp.y + (1 - a) * hpy;
-    lp.z = a * lp.z + (1 - a) * hpz;
-    fx = lp.x; fy = lp.y; fz = lp.z;
-  }
+  // lowpass
+  if (cfg.lpAlpha >= 0.999) return { fx, fy, fz };
 
-  return { fx, fy, fz };
+  const a = cfg.lpAlpha;
+  lp.x = a * lp.x + (1 - a) * fx;
+  lp.y = a * lp.y + (1 - a) * fy;
+  lp.z = a * lp.z + (1 - a) * fz;
+  return { fx: lp.x, fy: lp.y, fz: lp.z };
 }
-
-/* ══════════════════════════════════════════════
-   INTEGRATION (Beschleunigung → Geschw. → Weg)
-══════════════════════════════════════════════ */
-const LEAK_V = 0.985;
-const LEAK_P = 0.995;
 
 function integrate(fx, fy, fz, dt) {
   intg.vx = (intg.vx + fx * dt) * LEAK_V;
@@ -366,35 +323,8 @@ function integrate(fx, fy, fz, dt) {
   intg.pz = (intg.pz + intg.vz * dt) * LEAK_P;
 }
 
-/* ══════════════════════════════════════════════
-   WERTE FÜR GEWÄHLTE EINHEIT
-══════════════════════════════════════════════ */
-function getDisplayValues(fx, fy, fz) {
-  if (activeUnit === 'acc') {
-    return { vx: fx, vy: fy, vz: fz,
-             vt: Math.sqrt(fx*fx + fy*fy + fz*fz) };
-  }
-  if (activeUnit === 'disp') {
-    const px = intg.px*1000, py = intg.py*1000, pz = intg.pz*1000;
-    return { vx: px, vy: py, vz: pz,
-             vt: Math.sqrt(px*px + py*py + pz*pz) };
-  }
-  if (activeUnit === 'hz') {
-    // Im Hz-Modus zeigen wir die geschätzten Frequenzen
-    // Total = dominante Frequenz, X/Y/Z = je Achse
-    const freqT = domFreqHz;
-    return { vx: freqT, vy: freqT, vz: freqT, vt: freqT };
-  }
-  // vel (mm/s) – default
-  const vx = intg.vx*1000, vy = intg.vy*1000, vz = intg.vz*1000;
-  return { vx, vy, vz, vt: Math.sqrt(vx*vx + vy*vy + vz*vz) };
-}
-
-/* ══════════════════════════════════════════════
-   ZERO-CROSSING FREQUENZ-SCHÄTZUNG
-══════════════════════════════════════════════ */
-function estimateFrequency() {
-  if (freqBuf.len < 4) return 0;
+function estimateFrequencyHz() {
+  if (freqBuf.len < 8) return 0;
   let crossings = 0;
   let prev = freqBuf.t[(freqBuf.ptr - freqBuf.len + FREQ_WIN) % FREQ_WIN];
   for (let i = 1; i < freqBuf.len; i++) {
@@ -402,220 +332,263 @@ function estimateFrequency() {
     if ((prev < 0 && cur >= 0) || (prev >= 0 && cur < 0)) crossings++;
     prev = cur;
   }
-  // f = (Nulldurchgänge/2) / Zeitfenster
   return (crossings / 2) / FREQ_WIN_SEC;
 }
 
-/* ══════════════════════════════════════════════
-   LIVE CHART – 3 Panels X / Y / Z mit 30s
-══════════════════════════════════════════════ */
-function drawLive() {
-  const cvs = dom.liveChart;
-  const ctx = liveCtx;
-  const W   = cvs.getBoundingClientRect().width  || 320;
-  const H   = cvs.getBoundingClientRect().height || 380;
+/* =========================
+   UI UPDATE
+========================= */
+function setUnitUI() {
+  const u = unitLabel(activeUnit);
+  ['unitX','unitY','unitZ','unitT','unitPeak','unitRms'].forEach(id => {
+    const el = $(id);
+    if (el) el.textContent = u;
+  });
+  if (dom.mainSub) dom.mainSub.textContent = `${u} (Total)`;
+  buildOenormTable();
+}
+
+function showValues({ x, y, z, t, peak, rms }) {
+  dom.xVal.textContent = x.toFixed(2);
+  dom.yVal.textContent = y.toFixed(2);
+  dom.zVal.textContent = z.toFixed(2);
+  dom.tVal.textContent = t.toFixed(2);
+  dom.peakVal.textContent = peak.toFixed(2);
+  dom.rmsVal.textContent = rms.toFixed(2);
+
+  dom.mainNum.textContent = t.toFixed(2);
+  dom.mainSub.textContent = `${unitLabel(activeUnit)} (Total)`;
+}
+
+/* =========================
+   DRAW (3 Panels untereinander)
+========================= */
+function getCurrentSeriesKind() {
+  // fürs Diagramm zeigen wir die Einheit der Anzeige (außer Hz -> vel plotten)
+  if (activeUnit === 'hz') return 'vel';
+  return activeUnit; // 'vel'|'acc'|'disp'
+}
+
+function drawMultiPanel(ctx, seriesKind) {
+  const cvs = ctx.canvas;
+  const W = cvs.getBoundingClientRect().width || 320;
+  const H = cvs.getBoundingClientRect().height || 540;
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#0b0b0c';
   ctx.fillRect(0, 0, W, H);
 
-  const axes   = ['x', 'y', 'z'];
-  const labels = ['X', 'Y', 'Z'];
-  const panH   = H / 3;
-  const mL = 56, mR = 8, mT = 20, mB = 26;
+  const axes = ['x','y','z'];
+  const labels = ['X','Y','Z'];
+  const panH = H / 3;
+  const mL = 56, mR = 8, mT = 20, mB = 28;
 
   axes.forEach((s, pi) => {
     const offY = pi * panH;
-    const pw   = W - mL - mR;
-    const ph   = panH - mT - mB;
+    const pw = W - mL - mR;
+    const ph = panH - mT - mB;
 
-    // Panel-BG
-    ctx.fillStyle = pi % 2 === 0 ? '#0b0b0c' : '#0d0d0f';
+    ctx.fillStyle = (pi % 2 === 0) ? '#0b0b0c' : '#0d0d0f';
     ctx.fillRect(0, offY, W, panH);
 
     if (pi > 0) {
-      ctx.strokeStyle = '#2a2a2d'; ctx.lineWidth = 1;
+      ctx.strokeStyle = '#2a2a2d';
+      ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, offY); ctx.lineTo(W, offY); ctx.stroke();
     }
 
     if (buf.len < 2) {
-      ctx.fillStyle = COLORS[s]; ctx.font = 'bold 11px system-ui';
-      ctx.fillText(labels[pi], 4, offY + mT + 12);
+      ctx.fillStyle = COLORS[s];
+      ctx.font = 'bold 11px system-ui';
+      ctx.fillText(labels[pi], 6, offY + mT + 10);
       return;
     }
 
-    // Min/Max berechnen
+    // min/max aus buffer
     let mn = Infinity, mx = -Infinity;
     for (let i = 0; i < buf.len; i++) {
-      const v = buf[s][(buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN];
-      if (v < mn) mn = v; if (v > mx) mx = v;
+      const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
+      const v = buf[seriesKind][s][idx];
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
     }
     if (!isFinite(mn)) { mn = -1; mx = 1; }
     if (mn === mx) { mn -= 0.5; mx += 0.5; }
-    const rng  = mx - mn;
-    const yMin = mn - rng * 0.08;
-    const yMax = mx + rng * 0.08;
-    const span = yMax - yMin || 1;
-    const toY  = (v) => offY + mT + ph - ((v - yMin) / span) * ph;
+    const pad = (mx - mn) * 0.08;
+    const yMin = mn - pad, yMax = mx + pad;
+    const span = (yMax - yMin) || 1;
 
-    // Grid-Linien
+    const toY = (v) => offY + mT + ph - ((v - yMin) / span) * ph;
+
+    // grid
     ctx.lineWidth = 1;
     for (let g = 0; g <= 4; g++) {
+      const gy = offY + mT + (g/4)*ph;
       ctx.strokeStyle = '#1e1e22';
-      const gy = offY + mT + (g / 4) * ph;
-      ctx.beginPath(); ctx.moveTo(mL, gy); ctx.lineTo(mL + pw, gy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mL, gy); ctx.lineTo(mL+pw, gy); ctx.stroke();
     }
-    // Zeitgitter (6 Linien = alle 5s)
     for (let g = 0; g <= 6; g++) {
+      const gx = mL + (g/6)*pw;
       ctx.strokeStyle = '#1a1a1e';
-      const gx = mL + (g / 6) * pw;
-      ctx.beginPath(); ctx.moveTo(gx, offY + mT); ctx.lineTo(gx, offY + mT + ph); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gx, offY+mT); ctx.lineTo(gx, offY+mT+ph); ctx.stroke();
     }
 
-    // Nulllinie
+    // zero line
     const y0 = toY(0);
-    if (y0 >= offY + mT && y0 <= offY + mT + ph) {
-      ctx.strokeStyle = '#3a3a42'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(mL, y0); ctx.lineTo(mL + pw, y0); ctx.stroke();
+    if (y0 >= offY+mT && y0 <= offY+mT+ph) {
+      ctx.strokeStyle = '#3a3a42';
+      ctx.beginPath(); ctx.moveTo(mL, y0); ctx.lineTo(mL+pw, y0); ctx.stroke();
     }
 
-    // Y-Ticks (4 Werte)
-    ctx.fillStyle = '#5a5a62'; ctx.font = '9px system-ui'; ctx.textAlign = 'right';
-    [yMin, (yMin+yMax)/2, yMax].forEach(v => {
-      const yp = toY(v);
-      if (yp >= offY + mT - 2 && yp <= offY + mT + ph + 2)
-        ctx.fillText(v.toFixed(2), mL - 3, yp + 3);
-    });
-    ctx.textAlign = 'left';
+    // labels
+    ctx.fillStyle = COLORS[s];
+    ctx.font = 'bold 11px system-ui';
+    ctx.fillText(labels[pi], 6, offY + mT + 10);
 
-    // Achsenlabel + Einheit
-    ctx.fillStyle = COLORS[s]; ctx.font = 'bold 11px system-ui';
-    ctx.fillText(labels[pi], 4, offY + mT + 10);
-    ctx.fillStyle = '#5a5a62'; ctx.font = '9px system-ui';
-    ctx.fillText(unitLabel(), 4, offY + mT + 21);
+    ctx.fillStyle = '#5a5a62';
+    ctx.font = '9px system-ui';
+    ctx.fillText(unitLabel(seriesKind), 6, offY + mT + 22);
 
-    // Zeitachse (nur letztes Panel)
+    // time labels bottom only
     if (pi === 2) {
-      ctx.fillStyle = '#5a5a62'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
-      // Labels: -30s bis 0s
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#5a5a62';
+      ctx.font = '9px system-ui';
       for (let g = 0; g <= 6; g++) {
-        const sec = -WIN_SEC + (g / 6) * WIN_SEC;
-        const gx  = mL + (g / 6) * pw;
-        ctx.fillText(`${sec.toFixed(0)}s`, gx, offY + mT + ph + 17);
+        const sec = -WIN_SEC + (g/6)*WIN_SEC;
+        const gx = mL + (g/6)*pw;
+        ctx.fillText(`${sec.toFixed(0)}s`, gx, offY + mT + ph + 18);
       }
       ctx.textAlign = 'left';
     }
 
-    // Kurve
-    ctx.strokeStyle = COLORS[s]; ctx.lineWidth = 1.8;
+    // curve
+    ctx.strokeStyle = COLORS[s];
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     for (let i = 0; i < buf.len; i++) {
       const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
-      const xp  = mL + (i / (WINDOW_LEN - 1)) * pw;
-      const yp  = toY(buf[s][idx]);
+      const xp = mL + (i/(WINDOW_LEN-1))*pw;
+      const yp = toY(buf[seriesKind][s][idx]);
       i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
     }
     ctx.stroke();
   });
 }
 
-/* ══════════════════════════════════════════════
-   RESULT CHART – 3 Panels X / Y / Z
-══════════════════════════════════════════════ */
+function drawLive() {
+  drawMultiPanel(liveCtx, getCurrentSeriesKind());
+}
+
 function drawResult(data) {
-  const cvs  = dom.resultChart;
-  const ctx  = resCtx;
-  const W    = cvs.getBoundingClientRect().width  || 320;
-  const H    = cvs.getBoundingClientRect().height || 380;
+  // data ist savedData: enthält arrays und unit-keys
+  const seriesKind = (data.displayUnit === 'hz') ? 'vel' : data.displayUnit;
+
+  // temporär buf-like Zugriff auf arrays bauen:
+  const tmp = {
+    len: data.n,
+    ptr: data.n % WINDOW_LEN,
+    vel: data.vel,
+    acc: data.acc,
+    disp: data.disp
+  };
+
+  // wir nutzen eine vereinfachte renderer-Variante (ohne Ringpuffer)
+  const ctx = resCtx;
+  const cvs = ctx.canvas;
+  const W = cvs.getBoundingClientRect().width || 320;
+  const H = cvs.getBoundingClientRect().height || 540;
 
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0b0b0c'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#0b0b0c';
+  ctx.fillRect(0, 0, W, H);
 
-  const axes   = ['x', 'y', 'z'];
-  const labels = ['X', 'Y', 'Z'];
-  const panH   = H / 3;
-  const mL = 56, mR = 8, mT = 20, mB = 26;
+  const axes = ['x','y','z'];
+  const labels = ['X','Y','Z'];
+  const panH = H/3;
+  const mL = 56, mR = 8, mT = 20, mB = 28;
 
   axes.forEach((s, pi) => {
-    const offY   = pi * panH;
-    const pw     = W - mL - mR;
-    const ph     = panH - mT - mB;
-    const series = data[s];
-    if (!series || series.length < 2) return;
+    const offY = pi*panH;
+    const pw = W - mL - mR;
+    const ph = panH - mT - mB;
 
-    ctx.fillStyle = pi % 2 === 0 ? '#0b0b0c' : '#0d0d0f';
+    ctx.fillStyle = (pi % 2 === 0) ? '#0b0b0c' : '#0d0d0f';
     ctx.fillRect(0, offY, W, panH);
 
     if (pi > 0) {
-      ctx.strokeStyle = '#2a2a2d'; ctx.lineWidth = 1;
+      ctx.strokeStyle = '#2a2a2d';
+      ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, offY); ctx.lineTo(W, offY); ctx.stroke();
     }
 
-    let mn = Infinity, mx = -Infinity;
-    series.forEach(v => { if (v < mn) mn = v; if (v > mx) mx = v; });
-    if (mn === mx) { mn -= 0.5; mx += 0.5; }
-    const pad  = (mx - mn) * 0.08;
-    const yMin = mn - pad, yMax = mx + pad;
-    const span = yMax - yMin || 1;
-    const toY  = (v) => offY + mT + ph - ((v - yMin) / span) * ph;
+    const arr = tmp[seriesKind][s];
+    if (!arr || arr.length < 2) return;
 
+    let mn = Infinity, mx = -Infinity;
+    for (const v of arr) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    if (mn === mx) { mn -= 0.5; mx += 0.5; }
+    const pad = (mx - mn) * 0.08;
+    const yMin = mn - pad, yMax = mx + pad;
+    const span = (yMax - yMin) || 1;
+    const toY = (v) => offY + mT + ph - ((v - yMin)/span)*ph;
+
+    // grid
     ctx.lineWidth = 1;
-    for (let g = 0; g <= 4; g++) {
+    for (let g=0; g<=4; g++){
+      const gy = offY + mT + (g/4)*ph;
       ctx.strokeStyle = '#1e1e22';
-      const gy = offY + mT + (g / 4) * ph;
-      ctx.beginPath(); ctx.moveTo(mL, gy); ctx.lineTo(mL + pw, gy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mL, gy); ctx.lineTo(mL+pw, gy); ctx.stroke();
     }
-    for (let g = 0; g <= 6; g++) {
+    for (let g=0; g<=6; g++){
+      const gx = mL + (g/6)*pw;
       ctx.strokeStyle = '#1a1a1e';
-      const gx = mL + (g / 6) * pw;
-      ctx.beginPath(); ctx.moveTo(gx, offY + mT); ctx.lineTo(gx, offY + mT + ph); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gx, offY+mT); ctx.lineTo(gx, offY+mT+ph); ctx.stroke();
     }
 
     const y0 = toY(0);
-    if (y0 >= offY + mT && y0 <= offY + mT + ph) {
-      ctx.strokeStyle = '#3a3a42'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(mL, y0); ctx.lineTo(mL + pw, y0); ctx.stroke();
+    if (y0 >= offY+mT && y0 <= offY+mT+ph) {
+      ctx.strokeStyle = '#3a3a42';
+      ctx.beginPath(); ctx.moveTo(mL, y0); ctx.lineTo(mL+pw, y0); ctx.stroke();
     }
 
-    ctx.fillStyle = '#5a5a62'; ctx.font = '9px system-ui'; ctx.textAlign = 'right';
-    [yMin, (yMin+yMax)/2, yMax].forEach(v => {
-      const yp = toY(v);
-      if (yp >= offY + mT - 2 && yp <= offY + mT + ph + 2)
-        ctx.fillText(v.toFixed(2), mL - 3, yp + 3);
-    });
-    ctx.textAlign = 'left';
+    // labels
+    ctx.fillStyle = COLORS[s];
+    ctx.font = 'bold 11px system-ui';
+    ctx.fillText(labels[pi], 6, offY + mT + 10);
 
-    ctx.fillStyle = COLORS[s]; ctx.font = 'bold 11px system-ui';
-    ctx.fillText(labels[pi], 4, offY + mT + 10);
-    ctx.fillStyle = '#5a5a62'; ctx.font = '9px system-ui';
-    ctx.fillText(unitLabel(data.unit), 4, offY + mT + 21);
+    ctx.fillStyle = '#5a5a62';
+    ctx.font = '9px system-ui';
+    ctx.fillText(unitLabel(seriesKind), 6, offY + mT + 22);
 
     if (pi === 2) {
-      ctx.fillStyle = '#5a5a62'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
-      for (let g = 0; g <= 6; g++) {
-        const t  = (data.durationSec * g / 6).toFixed(1);
-        const gx = mL + (g / 6) * pw;
-        ctx.fillText(`${t}s`, gx, offY + mT + ph + 17);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#5a5a62';
+      ctx.font = '9px system-ui';
+      for (let g=0; g<=6; g++){
+        const t = (data.durationSec * g / 6).toFixed(1);
+        const gx = mL + (g/6)*pw;
+        ctx.fillText(`${t}s`, gx, offY + mT + ph + 18);
       }
       ctx.textAlign = 'left';
     }
 
-    ctx.strokeStyle = COLORS[s]; ctx.lineWidth = 1.8;
+    // curve
+    ctx.strokeStyle = COLORS[s];
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
-    series.forEach((v, i) => {
-      const xp = mL + (i / (series.length - 1)) * pw;
+    arr.forEach((v, i) => {
+      const xp = mL + (i/(arr.length-1))*pw;
       const yp = toY(v);
-      i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
+      i===0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
     });
     ctx.stroke();
   });
-
-  dom.resAxis.innerHTML = '';
 }
 
-/* ══════════════════════════════════════════════
+/* =========================
    SENSOR
-══════════════════════════════════════════════ */
+========================= */
 function onMotion(e) {
   motionEventCount++;
   const a = (
@@ -624,74 +597,93 @@ function onMotion(e) {
     e.acceleration.y != null &&
     e.acceleration.z != null
   ) ? e.acceleration : e.accelerationIncludingGravity;
+
   if (!a) return;
   rawX = Number(a.x) || 0;
   rawY = Number(a.y) || 0;
   rawZ = Number(a.z) || 0;
 }
-window.addEventListener('devicemotion', onMotion, { passive: true });
+window.addEventListener('devicemotion', onMotion, { passive:true });
 
-/* ══════════════════════════════════════════════
-   RESET
-══════════════════════════════════════════════ */
+/* =========================
+   RESET / START / STOP
+========================= */
+function resetStats() {
+  for (const k of ['vel','acc','disp']) {
+    stats[k].peak = 0;
+    stats[k].sum2 = 0;
+    stats[k].cnt = 0;
+  }
+  stats.hz.peak = 0; stats.hz.sum = 0; stats.hz.cnt = 0;
+}
+
 function resetState() {
   running = false;
-  if (rafId)       { cancelAnimationFrame(rafId);  rafId       = null; }
-  if (durTimer)    { clearInterval(durTimer);       durTimer    = null; }
-  if (noDataTimer) { clearTimeout(noDataTimer);     noDataTimer = null; }
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+
+  if (durTimer) clearInterval(durTimer);
+  durTimer = null;
+
+  if (noDataTimer) clearTimeout(noDataTimer);
+  noDataTimer = null;
 
   startTime = null;
-  peakTotal = 0; rmsAcc = 0; rmsCnt = 0;
-  motionEventCount = 0; domFreqHz = 0;
+  motionEventCount = 0;
 
   buf.ptr = 0; buf.len = 0;
-  buf.x.fill(0); buf.y.fill(0); buf.z.fill(0); buf.t.fill(0);
+  ['vel','acc','disp'].forEach(kind => {
+    buf[kind].x.fill(0); buf[kind].y.fill(0); buf[kind].z.fill(0); buf[kind].t.fill(0);
+  });
+
   freqBuf.ptr = 0; freqBuf.len = 0; freqBuf.t.fill(0);
+  domFreqHz = 0;
 
-  intg.vx = intg.vy = intg.vz = 0;
-  intg.px = intg.py = intg.pz = 0;
-  intg.prev = null;
+  hp.x=hp.y=hp.z=0; hp.px=hp.py=hp.pz=0;
+  lp.x=lp.y=lp.z=0;
 
-  hp.x = hp.y = hp.z = 0; hp.px = hp.py = hp.pz = 0;
-  lp.x = lp.y = lp.z = 0;
+  intg.vx=intg.vy=intg.vz=0;
+  intg.px=intg.py=intg.pz=0;
+  intg.prev=null;
 
-  rawX = rawY = rawZ = 0;
-  rec = null; savedData = null;
+  resetStats();
+
+  savedData = null;
+  rec = null;
 
   dom.startBtn.textContent = 'Start';
   dom.startBtn.classList.add('btn--accent');
   dom.startBtn.classList.remove('btn--stop');
 
-  dom.mainNum.textContent  = '0.00';
-  dom.mainSub.textContent  = `${unitLabel()} (Total)`;
-  dom.xVal.textContent     = '0.00';
-  dom.yVal.textContent     = '0.00';
-  dom.zVal.textContent     = '0.00';
-  dom.tVal.textContent     = '0.00';
-  dom.peakVal.textContent  = '0.00';
-  dom.rmsVal.textContent   = '0.00';
-  dom.freqVal.textContent  = '—';
-  dom.durVal.textContent   = '00:00';
-  dom.results.hidden       = true;
-  dom.resMeta.textContent  = '—';
+  dom.results.hidden = true;
+  dom.resMeta.textContent = '—';
+
+  dom.durVal.textContent = '00:00';
+  dom.freqVal.textContent = '—';
+
+  dom.mainNum.textContent = '0.00';
+  dom.mainSub.textContent = `${unitLabel(activeUnit)} (Total)`;
+
+  dom.xVal.textContent = '0.00';
+  dom.yVal.textContent = '0.00';
+  dom.zVal.textContent = '0.00';
+  dom.tVal.textContent = '0.00';
+  dom.peakVal.textContent = '0.00';
+  dom.rmsVal.textContent = '0.00';
+
   dom.debugPanel.textContent = 'Warte auf Sensor-Daten …';
 
-  document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
-
-  // ÖNORM-Highlighting zurücksetzen
-  const cfg = OENORM[activeUnit] || OENORM.vel;
-  cfg.rows.forEach(r => { const el = $(r.id); if (el) el.classList.remove('is-active'); });
+  dom.unitBtns().forEach(b => b.disabled = false);
 
   setStatus('', '');
+  buildOenormTable();
   drawLive();
 }
 
-/* ══════════════════════════════════════════════
-   START / STOP
-══════════════════════════════════════════════ */
 function startMeasurement() {
   if (running) return;
 
+  // iOS permission requirement
   if (IS_IOS &&
       typeof DeviceMotionEvent !== 'undefined' &&
       typeof DeviceMotionEvent.requestPermission === 'function' &&
@@ -701,21 +693,26 @@ function startMeasurement() {
   }
 
   resetState();
-  running   = true;
+  running = true;
   startTime = Date.now();
-  motionEventCount = 0;
 
-  document.querySelectorAll('.unitBtn').forEach(b => b.disabled = true);
+  dom.unitBtns().forEach(b => b.disabled = true);
 
   rec = {
-    unit: activeUnit, filter: activeFilter,
-    t0: performance.now(), startTs: startTime,
-    x: [], y: [], z: [], t: [], freq: []
+    startTs: startTime,
+    filter: activeFilter,
+    // speichern alle Einheiten + freq
+    vel: { x:[], y:[], z:[], t:[] },
+    acc: { x:[], y:[], z:[], t:[] },
+    disp:{ x:[], y:[], z:[], t:[] },
+    freq: [],
+    t0: performance.now(),
   };
 
   dom.startBtn.textContent = 'Stop';
   dom.startBtn.classList.remove('btn--accent');
   dom.startBtn.classList.add('btn--stop');
+
   setStatus('MESSUNG LÄUFT …', 'is-running');
 
   durTimer = setInterval(() => {
@@ -723,8 +720,9 @@ function startMeasurement() {
   }, 250);
 
   noDataTimer = setTimeout(() => {
-    if (motionEventCount === 0)
+    if (motionEventCount === 0) {
       setStatus('Keine Sensor-Daten. iPhone: Sensorerlaubnis nötig.', 'is-error');
+    }
   }, 2000);
 
   rafId = requestAnimationFrame(loop);
@@ -734,248 +732,302 @@ function stopMeasurement() {
   if (!running) return;
   running = false;
 
-  if (rafId)       { cancelAnimationFrame(rafId);  rafId       = null; }
-  if (durTimer)    { clearInterval(durTimer);       durTimer    = null; }
-  if (noDataTimer) { clearTimeout(noDataTimer);     noDataTimer = null; }
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
 
-  document.querySelectorAll('.unitBtn').forEach(b => b.disabled = false);
+  if (durTimer) clearInterval(durTimer);
+  durTimer = null;
+
+  if (noDataTimer) clearTimeout(noDataTimer);
+  noDataTimer = null;
+
+  dom.unitBtns().forEach(b => b.disabled = false);
 
   dom.startBtn.textContent = 'Start';
   dom.startBtn.classList.add('btn--accent');
   dom.startBtn.classList.remove('btn--stop');
+
   setStatus('Messung abgeschlossen ✓', 'is-done');
 
-  if (rec && rec.t.length > 5) {
+  if (rec && rec.vel.t.length > 10) {
+    const durationSec = (performance.now() - rec.t0) / 1000;
     savedData = {
-      unit: rec.unit, filter: rec.filter,
       startTs: rec.startTs,
-      durationSec: (performance.now() - rec.t0) / 1000,
-      x: rec.x.slice(), y: rec.y.slice(),
-      z: rec.z.slice(), t: rec.t.slice(),
-      freq: rec.freq.slice(),
+      durationSec,
+      n: rec.vel.t.length,
+      filter: rec.filter,
+      vel: { x: rec.vel.x, y: rec.vel.y, z: rec.vel.z, t: rec.vel.t },
+      acc: { x: rec.acc.x, y: rec.acc.y, z: rec.acc.z, t: rec.acc.t },
+      disp:{ x: rec.disp.x,y: rec.disp.y,z: rec.disp.z,t: rec.disp.t },
+      freq: rec.freq,
+      displayUnit: (dom.exportUnit ? dom.exportUnit.value : activeUnit),
     };
 
     dom.results.hidden = false;
     dom.resMeta.textContent =
       `${new Date(savedData.startTs).toLocaleString('de-DE')} · ` +
       `Dauer: ${savedData.durationSec.toFixed(1)} s · ` +
-      `Punkte: ${savedData.t.length} · ` +
+      `Punkte: ${savedData.n} · ` +
       `Filter: ${FILTERS[savedData.filter]?.label || savedData.filter}`;
 
-    if (dom.exportUnit) dom.exportUnit.value = savedData.unit;
-    setTimeout(() => { resizeCanvas(dom.resultChart); drawResult(savedData); }, 80);
+    setTimeout(() => { initCanvases(); drawResult(savedData); }, 80);
   }
   rec = null;
 }
 
 dom.startBtn.addEventListener('click', () => running ? stopMeasurement() : startMeasurement());
-dom.resetBtn.addEventListener('click', () => resetState());
+dom.resetBtn.addEventListener('click', resetState);
 
-/* ══════════════════════════════════════════════
-   HAUPT-LOOP
-══════════════════════════════════════════════ */
+/* =========================
+   LOOP
+========================= */
 function loop() {
   if (!running) return;
   rafId = requestAnimationFrame(loop);
 
   const now = performance.now();
-  const dt  = Math.min((now - (intg.prev ?? now)) / 1000, 0.05);
+  const dt = Math.min((now - (intg.prev ?? now)) / 1000, 0.05);
   intg.prev = now;
 
-  // 1. Filter
   const { fx, fy, fz } = applyFilter(rawX, rawY, rawZ);
-
-  // 2. Integration
   integrate(fx, fy, fz, dt);
 
-  // 3. Velocity für Peak/RMS/ÖNORM (immer in mm/s)
-  const velTotal = Math.sqrt(intg.vx*intg.vx + intg.vy*intg.vy + intg.vz*intg.vz) * 1000;
-  if (velTotal > peakTotal) peakTotal = velTotal;
-  rmsAcc += velTotal * velTotal; rmsCnt++;
+  // ACC total
+  const accT = Math.sqrt(fx*fx + fy*fy + fz*fz);
 
-  // 4. Anzeigewerte je Einheit
-  const { vx, vy, vz, vt } = getDisplayValues(fx, fy, fz);
+  // VEL mm/s
+  const velX = intg.vx * 1000;
+  const velY = intg.vy * 1000;
+  const velZ = intg.vz * 1000;
+  const velT = Math.sqrt(velX*velX + velY*velY + velZ*velZ);
 
-  // 5. Buffer befüllen (für Live-Chart immer mm/s, unabhängig von Anzeige-Einheit)
-  //    → damit Chart immer konsistent ist
-  const bx = intg.vx*1000, by = intg.vy*1000, bz = intg.vz*1000;
-  buf.x[buf.ptr] = bx; buf.y[buf.ptr] = by;
-  buf.z[buf.ptr] = bz; buf.t[buf.ptr] = velTotal;
-  buf.ptr = (buf.ptr + 1) % WINDOW_LEN;
-  if (buf.len < WINDOW_LEN) buf.len++;
+  // DISP mm
+  const dispX = intg.px * 1000;
+  const dispY = intg.py * 1000;
+  const dispZ = intg.pz * 1000;
+  const dispT = Math.sqrt(dispX*dispX + dispY*dispY + dispZ*dispZ);
 
-  // 6. Frequenz-Buffer
-  freqBuf.t[freqBuf.ptr] = velTotal;
+  // freq buffer uses velT
+  freqBuf.t[freqBuf.ptr] = velT;
   freqBuf.ptr = (freqBuf.ptr + 1) % FREQ_WIN;
   if (freqBuf.len < FREQ_WIN) freqBuf.len++;
 
-  // Frequenz alle ~0.5s neu schätzen (alle 30 Frames)
-  if (buf.ptr % 30 === 0) {
-    domFreqHz = estimateFrequency();
+  if (buf.ptr % 30 === 0) domFreqHz = estimateFrequencyHz();
+  if (domFreqHz > stats.hz.peak) stats.hz.peak = domFreqHz;
+  stats.hz.sum += domFreqHz; stats.hz.cnt++;
+
+  // store into ring buffer
+  buf.acc.x[buf.ptr] = fx;   buf.acc.y[buf.ptr] = fy;   buf.acc.z[buf.ptr] = fz;   buf.acc.t[buf.ptr] = accT;
+  buf.vel.x[buf.ptr] = velX; buf.vel.y[buf.ptr] = velY; buf.vel.z[buf.ptr] = velZ; buf.vel.t[buf.ptr] = velT;
+  buf.disp.x[buf.ptr]= dispX;buf.disp.y[buf.ptr]= dispY;buf.disp.z[buf.ptr]= dispZ;buf.disp.t[buf.ptr]= dispT;
+
+  buf.ptr = (buf.ptr + 1) % WINDOW_LEN;
+  if (buf.len < WINDOW_LEN) buf.len++;
+
+  // stats peak/rms for the three physical units (total)
+  // vel
+  stats.vel.peak = Math.max(stats.vel.peak, velT);
+  stats.vel.sum2 += velT*velT; stats.vel.cnt++;
+  // acc
+  stats.acc.peak = Math.max(stats.acc.peak, accT);
+  stats.acc.sum2 += accT*accT; stats.acc.cnt++;
+  // disp
+  stats.disp.peak = Math.max(stats.disp.peak, dispT);
+  stats.disp.sum2 += dispT*dispT; stats.disp.cnt++;
+
+  // display depending on unit
+  if (activeUnit === 'hz') {
+    const avgHz = stats.hz.cnt ? (stats.hz.sum / stats.hz.cnt) : 0;
+    dom.freqVal.textContent = domFreqHz ? domFreqHz.toFixed(1) : '—';
+    showValues({ x:domFreqHz, y:domFreqHz, z:domFreqHz, t:domFreqHz, peak:stats.hz.peak, rms:avgHz });
+    updateOenormHighlight(domFreqHz);
+  } else if (activeUnit === 'acc') {
+    dom.freqVal.textContent = domFreqHz ? domFreqHz.toFixed(1) : '—';
+    const rms = stats.acc.cnt ? Math.sqrt(stats.acc.sum2 / stats.acc.cnt) : 0;
+    showValues({ x:fx, y:fy, z:fz, t:accT, peak:stats.acc.peak, rms });
+    updateOenormHighlight(stats.acc.peak);
+  } else if (activeUnit === 'disp') {
+    dom.freqVal.textContent = domFreqHz ? domFreqHz.toFixed(1) : '—';
+    const rms = stats.disp.cnt ? Math.sqrt(stats.disp.sum2 / stats.disp.cnt) : 0;
+    showValues({ x:dispX, y:dispY, z:dispZ, t:dispT, peak:stats.disp.peak, rms });
+    updateOenormHighlight(stats.disp.peak);
+  } else { // vel
+    dom.freqVal.textContent = domFreqHz ? domFreqHz.toFixed(1) : '—';
+    const rms = stats.vel.cnt ? Math.sqrt(stats.vel.sum2 / stats.vel.cnt) : 0;
+    showValues({ x:velX, y:velY, z:velZ, t:velT, peak:stats.vel.peak, rms });
+    updateOenormHighlight(stats.vel.peak);
   }
-
-  // 7. UI aktualisieren
-  dom.xVal.textContent    = vx.toFixed(2);
-  dom.yVal.textContent    = vy.toFixed(2);
-  dom.zVal.textContent    = vz.toFixed(2);
-  dom.tVal.textContent    = vt.toFixed(2);
-  dom.peakVal.textContent = peakTotal.toFixed(2);
-  dom.rmsVal.textContent  = rmsCnt ? Math.sqrt(rmsAcc / rmsCnt).toFixed(2) : '0.00';
-  dom.freqVal.textContent = domFreqHz > 0 ? domFreqHz.toFixed(1) : '—';
-  dom.mainNum.textContent = vt.toFixed(2);
-  dom.mainSub.textContent = `${unitLabel()} (Total)`;
-
-  // ÖNORM-Bewertung
-  const oenormVal = activeUnit === 'vel'  ? velTotal :
-                    activeUnit === 'acc'  ? Math.sqrt(fx*fx+fy*fy+fz*fz) :
-                    activeUnit === 'disp' ? Math.sqrt(intg.px*intg.px+intg.py*intg.py+intg.pz*intg.pz)*1000 :
-                    domFreqHz;
-  updateOenorm(oenormVal);
 
   drawLive();
 
   dom.debugPanel.textContent =
     `raw  ax=${rawX.toFixed(3)} ay=${rawY.toFixed(3)} az=${rawZ.toFixed(3)} m/s²\n` +
-    `filt fx=${fx.toFixed(3)} fy=${fy.toFixed(3)} fz=${fz.toFixed(3)} m/s²\n` +
-    `vel  x=${(intg.vx*1000).toFixed(2)} y=${(intg.vy*1000).toFixed(2)} z=${(intg.vz*1000).toFixed(2)} mm/s\n` +
-    `velTotal=${velTotal.toFixed(2)} mm/s | Peak=${peakTotal.toFixed(2)} mm/s\n` +
-    `freq=${domFreqHz.toFixed(1)} Hz | dt=${(dt*1000).toFixed(1)} ms | filter=${activeFilter} | unit=${activeUnit}`;
+    `filt fx=${fx.toFixed(3)} fy=${fy.toFixed(3)} fz=${fz.toFixed(3)} m/s² | filter=${activeFilter}\n` +
+    `vel  x=${velX.toFixed(2)} y=${velY.toFixed(2)} z=${velZ.toFixed(2)} total=${velT.toFixed(2)} mm/s\n` +
+    `disp x=${dispX.toFixed(3)} y=${dispY.toFixed(3)} z=${dispZ.toFixed(3)} total=${dispT.toFixed(3)} mm\n` +
+    `freq=${domFreqHz.toFixed(1)} Hz | dt=${(dt*1000).toFixed(1)} ms`;
 
-  // Recording
-  if (rec && rec.t.length < MAX_REC) {
-    rec.x.push(intg.vx*1000);
-    rec.y.push(intg.vy*1000);
-    rec.z.push(intg.vz*1000);
-    rec.t.push(velTotal);
+  // record (limit to avoid runaway)
+  if (rec && rec.vel.t.length < 12000) {
+    rec.vel.x.push(velX); rec.vel.y.push(velY); rec.vel.z.push(velZ); rec.vel.t.push(velT);
+    rec.acc.x.push(fx);   rec.acc.y.push(fy);   rec.acc.z.push(fz);   rec.acc.t.push(accT);
+    rec.disp.x.push(dispX);rec.disp.y.push(dispY);rec.disp.z.push(dispZ);rec.disp.t.push(dispT);
     rec.freq.push(domFreqHz);
   }
 }
 
-/* ══════════════════════════════════════════════
-   CSV EXPORT
-══════════════════════════════════════════════ */
+/* =========================
+   UNIT BUTTONS / FILTER SELECT
+========================= */
+dom.unitBtns().forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeUnit = btn.dataset.unit;
+    dom.unitBtns().forEach(b => b.classList.toggle('is-active', b === btn));
+    setUnitUI();
+  });
+});
+
+dom.filterSelect?.addEventListener('change', () => {
+  activeFilter = dom.filterSelect.value;
+  // reset filter state to avoid jump
+  hp.x=hp.y=hp.z=0; hp.px=hp.py=hp.pz=0;
+  lp.x=lp.y=lp.z=0;
+});
+
+/* =========================
+   CSV EXPORT (inkl. Hz)
+========================= */
 function exportCSV() {
   if (!savedData) return;
-  const expUnit = dom.exportUnit ? dom.exportUnit.value : savedData.unit;
-  const u       = unitLabel(expUnit);
-  const data    = savedData;
-  const n       = data.t.length;
-  const dt      = data.durationSec / Math.max(1, n - 1);
+  const expUnit = dom.exportUnit ? dom.exportUnit.value : 'vel';
+  const u = unitLabel(expUnit);
 
-  // Konvertierung der gespeicherten mm/s Daten in gewünschte Einheit
-  function convert(v_mms) {
-    if (expUnit === 'acc')  return v_mms / 1000 * (2 * Math.PI * 10); // ~@10Hz
-    if (expUnit === 'disp') return (v_mms / 1000) / (2 * Math.PI * 10) * 1000; // mm @10Hz
-    if (expUnit === 'hz')   return null; // Hz separat
-    return v_mms; // vel mm/s
-  }
+  const n = savedData.n;
+  const dt = savedData.durationSec / Math.max(1, n-1);
 
   let csv = `# HTB Schwingungsmesser Export\n`;
-  csv += `# Start: ${new Date(data.startTs).toLocaleString('de-DE')}\n`;
-  csv += `# Dauer: ${data.durationSec.toFixed(2)} s\n`;
-  csv += `# Einheit: ${u}\n`;
-  csv += `# Filter: ${FILTERS[data.filter]?.label || data.filter}\n`;
-  csv += `# Norm: ÖNORM S 9020\n`;
-  if (expUnit !== 'vel' && expUnit !== 'hz') {
-    csv += `# Hinweis: Konvertierung aus mm/s bei Annahme f=10 Hz\n`;
-  }
-  csv += `#\n`;
+  csv += `# Start: ${new Date(savedData.startTs).toLocaleString('de-DE')}\n`;
+  csv += `# Dauer: ${savedData.durationSec.toFixed(2)} s\n`;
+  csv += `# Filter: ${FILTERS[savedData.filter]?.label || savedData.filter}\n`;
+  csv += `# ExportUnit: ${expUnit} (${u})\n#\n`;
 
   if (expUnit === 'hz') {
     csv += `i;time_s;freq_Hz\n`;
-    for (let i = 0; i < n; i++) {
-      csv += `${i};${(i*dt).toFixed(4)};${(data.freq[i]||0).toFixed(2)}\n`;
+    for (let i=0;i<n;i++){
+      csv += `${i};${(i*dt).toFixed(4)};${(savedData.freq[i]||0).toFixed(3)}\n`;
     }
   } else {
-    csv += `i;time_s;x_${u};y_${u};z_${u};total_${u}\n`;
-    for (let i = 0; i < n; i++) {
-      const cx = convert(data.x[i]).toFixed(6);
-      const cy = convert(data.y[i]).toFixed(6);
-      const cz = convert(data.z[i]).toFixed(6);
-      const ct = convert(data.t[i]).toFixed(6);
-      csv += `${i};${(i*dt).toFixed(4)};${cx};${cy};${cz};${ct}\n`;
+    const src = savedData[expUnit]; // vel/acc/disp
+    csv += `i;time_s;x_${u};y_${u};z_${u};total_${u};freq_Hz\n`;
+    for (let i=0;i<n;i++){
+      csv += `${i};${(i*dt).toFixed(4)};` +
+        `${src.x[i].toFixed(6)};${src.y[i].toFixed(6)};${src.z[i].toFixed(6)};${src.t[i].toFixed(6)};` +
+        `${(savedData.freq[i]||0).toFixed(3)}\n`;
     }
   }
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
   a.href = url;
   a.download = `HTB_Messung_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
-$('csvBtn').addEventListener('click', exportCSV);
+dom.csvBtn?.addEventListener('click', exportCSV);
 
-/* ══════════════════════════════════════════════
-   PDF EXPORT – 3 Plots, A4, wissenschaftlich
-══════════════════════════════════════════════ */
-function plotToDataURL({ series, title, unit, color, durationSec }) {
-  const W = 1200, H = 260;
-  const mL = 74, mR = 20, mT = 32, mB = 50;
-  const pw = W - mL - mR, ph = H - mT - mB;
+dom.exportUnit?.addEventListener('change', () => {
+  if (!savedData) return;
+  savedData.displayUnit = dom.exportUnit.value;
+  setTimeout(() => drawResult(savedData), 50);
+});
 
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
+/* =========================
+   iOS PERMISSION BUTTON
+========================= */
+if (IS_IOS &&
+    typeof DeviceMotionEvent !== 'undefined' &&
+    typeof DeviceMotionEvent.requestPermission === 'function') {
+  dom.iosPermBtn.hidden = false;
+  dom.iosPermBtn.addEventListener('click', async () => {
+    try {
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res === 'granted') {
+        dom.iosPermBtn.hidden = true;
+        setStatus('Sensorerlaubnis erteilt – jetzt Start drücken.', 'is-done');
+      } else {
+        setStatus('Sensorerlaubnis verweigert!', 'is-error');
+      }
+    } catch (err) {
+      setStatus('Fehler: ' + err.message, 'is-error');
+    }
+  });
+}
 
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+/* =========================
+   PWA INSTALL (Android)
+========================= */
+(() => {
+  let deferredPrompt = null;
 
-  // Grid
-  ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 1;
-  for (let i = 0; i <= 12; i++) {
-    const x = mL + (i/12)*pw;
-    ctx.beginPath(); ctx.moveTo(x, mT); ctx.lineTo(x, mT+ph); ctx.stroke();
-  }
-  for (let j = 0; j <= 5; j++) {
-    const y = mT + (j/5)*ph;
-    ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL+pw, y); ctx.stroke();
-  }
-
-  // Min/Max
-  let mn = Infinity, mx = -Infinity;
-  for (const v of series) { if (v < mn) mn = v; if (v > mx) mx = v; }
-  if (!isFinite(mn)) { mn = -1; mx = 1; }
-  if (mn === mx) { mn -= 1; mx += 1; }
-  const pad = (mx - mn) * 0.08;
-  mn -= pad; mx += pad;
-  const yOf = (v) => mT + ph - ((v - mn) / (mx - mn)) * ph;
-
-  // Achsen
-  ctx.strokeStyle = '#444'; ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(mL, mT); ctx.lineTo(mL, mT+ph); ctx.lineTo(mL+pw, mT+ph);
-  ctx.stroke();
-
-  // Nulllinie
-  const y0 = yOf(0);
-  if (y0 >= mT && y0 <= mT+ph) {
-    ctx.strokeStyle = '#bbb'; ctx.lineWidth = 1;
-    ctx.setLineDash([5,5]);
-    ctx.beginPath(); ctx.moveTo(mL, y0); ctx.lineTo(mL+pw, y0); ctx.stroke();
-    ctx.setLineDash([]);
+  if (IS_STANDALONE) {
+    dom.installBanner.hidden = true;
+    return;
   }
 
-  // Titel
-  ctx.fillStyle = color; ctx.font = 'bold 15px Arial';
-  ctx.fillText(title, mL, 22);
-
-  // Y-Einheit (rotiert)
-  ctx.save();
-  ctx.translate(14, mT + ph/2);
-  ctx.rotate(-Math.PI/2);
-  ctx.fillStyle = '#555'; ctx.font = '12px Arial'; ctx.textAlign = 'center';
-  ctx.fillText(unit, 0, 0);
-  ctx.restore();
-
-  // Y-Ticks (6)
-  ctx.fillStyle = '#333'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
-  for (let j = 0; j <= 5; j++) {
-    const vv = mn + (j/5)*(mx-mn);
-    const yy = yOf(vv);
-    ctx.fillText(vv.toFixed(3), mL-5, yy+4);
-    ctx.strokeStyle = '#ccc'; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(mL-3, yy); ctx.lineTo(mL, yy); ctx.stroke();
+  if (IS_IOS) {
+    dom.installBanner.hidden = false;
+    dom.installBtn.textContent = 'Anleitung';
+    dom.installBtn.onclick = () => {
+      setStatus('iPhone: Safari → Teilen (□↑) → „Zum Home-Bildschirm"', 'is-error');
+    };
+    return;
   }
 
-  //
+  dom.installBanner.hidden = true;
+  dom.installBtn.disabled = true;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    dom.installBanner.hidden = false;
+    dom.installBtn.disabled = false;
+  });
+
+  dom.installBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!deferredPrompt) {
+      setStatus('Chrome-Menü (⋮) → „App installieren"', 'is-error');
+      return;
+    }
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    dom.installBanner.hidden = true;
+    dom.installBtn.disabled = true;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    dom.installBanner.hidden = true;
+    dom.installBtn.disabled = true;
+  });
+})();
+
+/* =========================
+   SERVICE WORKER
+========================= */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+/* =========================
+   INIT
+========================= */
+initTabs();
+buildOenormTable();
+setUnitUI();
+resetState();
+setTimeout(initCanvases, 150);
