@@ -1,4 +1,4 @@
-const CACHE = 'htb-vibro-v1006';
+const CACHE = 'htb-vibro-v10';
 
 const ASSETS = [
   './',
@@ -12,9 +12,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS))
-  );
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
   self.skipWaiting();
 });
 
