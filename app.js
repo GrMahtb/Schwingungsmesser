@@ -1,5 +1,10 @@
 'use strict';
 console.log('APP VERSION 2026-03-23 18:40 MULTIPANEL');
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sb = document.getElementById('statusBar');
+  if (sb) { sb.hidden = false; sb.className = 'statusBar'; sb.textContent = 'APP VERSION: MULTIPANEL 2026-03-23'; }
+});
 /* ===================== KONFIG ===================== */
 const WINDOW_LEN = 600;            // ~10s @ 60Hz
 const EVT_THR    = 0.1;            // mm/s
