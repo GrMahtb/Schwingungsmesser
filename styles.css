@@ -12,16 +12,43 @@ body{
 }
 
 /* HEADER */
-.brand{ margin:0 -14px 12px; overflow:hidden; }
-.brand__bar{
-  background:#000;
-  display:flex; align-items:center; gap:14px;
-  padding:10px 16px;
+.brand {
+  margin: 0 -14px 12px;
+  overflow: hidden;
 }
-.brand__logo{ line-height:0; display:flex; align-items:center; }
-.brand__logo svg{ height:46px; width:auto; display:block; }
-.brand__company{ color:#fff; font-weight:900; font-size:1.05em; white-space:nowrap; }
-.brand__subtitle{ color:rgba(255,255,255,.55); font-size:.75em; margin-top:3px; }
+.brand__bar {
+  background: #000;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+}
+.brand__logo {
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.brand__logo svg {
+  height: 46px;
+  width: auto;
+  display: block;
+}
+.brand__info {
+  flex: 1;
+  min-width: 0;
+}
+.brand__company {
+  color: #fff;
+  font-weight: 900;
+  font-size: 1.05em;
+  white-space: nowrap;
+}
+.brand__subtitle {
+  color: rgba(255,255,255,.55);
+  font-size: .75em;
+  margin-top: 3px;
+}
 
 .installBanner{
   display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
