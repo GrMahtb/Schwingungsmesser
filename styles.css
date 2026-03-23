@@ -19,3 +19,24 @@
   margin:-6px 0 10px;
   line-height:1.4;
 }
+.liveMeta{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:-6px 0 10px;
+  color:var(--muted);
+  font-size:.82em;
+  font-weight:900;
+}
+.liveTimer{
+  color:var(--accent);
+  font-variant-numeric:tabular-nums;
+}
+.oenorm-hint{
+  color:var(--muted);
+  font-size:.8em;
+  margin:-6px 0 10px;
+  line-height:1.4;
+}
