@@ -789,6 +789,137 @@ function drawPanel({ ctx, x, y, w, h, arr, title, mode, color }) {
 }
 
 /* ===================== LIVE CHART: 3 PANELS ===================== */
+/* ── EINZEL-PANEL ─────────────────────────────── */
+function drawPanel(ctx, x, y, w, h, arr, title, color) {
+  // Hintergrund
+  ctx.fillStyle = '#111113';
+  ctx.fillRect(x, y, w, h);
+
+  // Rahmen
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.strokeRect(x, y, w, h);
+
+  // Min/Max aus Buffer
+  let mx = 0;
+  for (let i = 0; i < buf.len; i++) {
+    const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
+    const v = Math.abs(arr[idx]);
+    if (v > mx) mx = v;
+  }
+  if (mx === 0 || !isFinite(mx)) mx = 1;
+
+  const yMin = -mx * 1.2;
+  const yMax =  mx * 1.2;
+  const yOf  = (v) => y + h - ((v - yMin) / (yMax - yMin)) * h;
+
+  // Gitterlinien
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 6]);
+  for (let i = 1; i <= 4; i++) {
+    const gx = x + (i / 5) * w;
+    ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx, y + h); ctx.stroke();
+  }
+  for (let j = 1; j <= 3; j++) {
+    const gy = y + (j / 4) * h;
+    ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + w, gy); ctx.stroke();
+  }
+
+  // ÖNORM S9020 Referenzlinien (nur bei vel, dezent gelb)
+  ctx.strokeStyle = 'rgba(255,237,0,0.15)';
+  ctx.setLineDash([4, 6]);
+  ctx.lineWidth = 1;
+  for (const g of [5, 10, 20, 30]) {
+    const yg  = yOf(g);
+    const ygn = yOf(-g);
+    if (yg  > y && yg  < y + h) { ctx.beginPath(); ctx.moveTo(x, yg);  ctx.lineTo(x + w, yg);  ctx.stroke(); }
+    if (ygn > y && ygn < y + h) { ctx.beginPath(); ctx.moveTo(x, ygn); ctx.lineTo(x + w, ygn); ctx.stroke(); }
+  }
+
+  // Null-Linie
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  const y0 = yOf(0);
+  ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x + w, y0); ctx.stroke();
+
+  // Messkurve
+  if (buf.len >= 2) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    for (let i = 0; i < buf.len; i++) {
+      const idx = (buf.ptr - buf.len + i + WINDOW_LEN) % WINDOW_LEN;
+      const xp  = x + (i / (WINDOW_LEN - 1)) * w;
+      const yp  = yOf(arr[idx]);
+      i === 0 ? ctx.moveTo(xp, yp) : ctx.lineTo(xp, yp);
+    }
+    ctx.stroke();
+  }
+
+  // Y-Ticks (Zahlenwerte links)
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = '10px system-ui, Arial';
+  ctx.textAlign = 'right';
+  for (const v of [mx, mx / 2, 0, -mx / 2, -mx]) {
+    const yp = yOf(v);
+    if (yp > y + 4 && yp < y + h - 4) {
+      ctx.fillText(v === 0 ? '0' : v.toFixed(2), x + 44, yp + 4);
+    }
+  }
+
+  // Titel (oben Mitte)
+  ctx.fillStyle = 'rgba(255,255,255,0.90)';
+  ctx.font = 'bold 12px system-ui, Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, x + w / 2, y + 16);
+
+  // X-Achsen-Label
+  ctx.fillStyle = 'rgba(255,255,255,0.40)';
+  ctx.font = '10px system-ui, Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText('t (s)', x + w - 3, y + h - 3);
+}
+
+/* ── 3-PANEL LIVE CHART ───────────────────────── */
+function drawLive() {
+  if (!dom.liveChart || !liveCtx) return;
+
+  const cvs = dom.liveChart;
+  const ctx  = liveCtx;
+  const W    = cvs.getBoundingClientRect().width  || 300;
+  const H    = cvs.getBoundingClientRect().height || 560;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0b0b0c';
+  ctx.fillRect(0, 0, W, H);
+
+  const pad    = 10;
+  const gap    = 10;
+  const left   = 50;   // Platz für Y-Ticks
+  const right  = 8;
+  const panelH = Math.floor((H - pad * 2 - gap * 2) / 3);
+  const pw     = W - left - right;
+
+  // Einheit für Achsenbeschriftung
+  const u = unitLabel();
+
+  drawPanel(ctx,
+    left, pad + 0 * (panelH + gap), pw, panelH,
+    buf.x, `X  (${u})`, '#32ff6a');
+
+  drawPanel(ctx,
+    left, pad + 1 * (panelH + gap), pw, panelH,
+    buf.y, `Y  (${u})`, '#4aa6ff');
+
+  drawPanel(ctx,
+    left, pad + 2 * (panelH + gap), pw, panelH,
+    buf.z, `Z  (${u})`, '#ffe95a');
+}
+
 function drawLive() {
   if (!dom.liveChart || !liveCtx) return;
 
