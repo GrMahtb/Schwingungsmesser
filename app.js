@@ -1,5 +1,5 @@
 'use strict';
-
+console.log('APP VERSION 2026-03-23 18:40 MULTIPANEL');
 /* ===================== KONFIG ===================== */
 const WINDOW_LEN = 600;            // ~10s @ 60Hz
 const EVT_THR    = 0.1;            // mm/s
