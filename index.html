@@ -3,44 +3,35 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="apple-mobile-web-app-title" content="HTB Vibro" />
   <title>HTB Schwingungsmesser</title>
-
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
   <link rel="icon" type="image/png" sizes="192x192" href="launchericon-192x192.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="launchericon-192x192.png" />
-
   <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
 
-  <!-- HEADER (schwarz) -->
+  <!-- HEADER -->
   <header class="brand">
     <div class="brand__bar">
       <div class="brand__logo" aria-label="HTB Logo">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 637.8 496.06" role="img" aria-label="HTB">
-          <path fill="#ffed00" d="M531.5,177.12H148.73l43.08-28.73c6.57-4.38,14.29-6.72,22.18-6.72h285.8s-140.7-93.84-140.7-93.84c-.7-.48-1.44-.95-2.15-1.42-21.73-14.64-54.36-14.64-76.09,0-.72.48-1.44.94-2.15,1.42L66.6,189.29h0c-4.68,3.2-8.98,6.93-12.8,11.12-41.01,45.63-8.95,118.29,52.5,118.53h382.77l-43.08,28.73c-6.57,4.38-14.29,6.72-22.19,6.72H138.01s140.71,93.84,140.71,93.84c.7.49,1.44.95,2.15,1.43,21.73,14.64,54.36,14.64,76.09,0,.72-.48,1.44-.94,2.14-1.42l212.1-141.45h0c4.69-3.21,9.01-6.96,12.84-11.16,11.73-12.89,18.35-30.15,18.33-47.58,0-39.16-31.73-70.9-70.87-70.9Z"/>
-          <path fill="#111111" d="M438.32,263.5c.08-5.32-1.27-9.39-4.05-12.22-2.79-2.82-7.04-4.81-12.77-5.96,4.83-.9,8.43-2.8,10.81-5.71,2.37-2.91,3.56-6.61,3.56-11.11v-3.44c0-4.83-.94-8.72-2.82-11.67-1.88-2.95-4.75-5.08-8.6-6.39-3.85-1.31-8.72-1.96-14.61-1.96h-157.8v33.77h-30.21v-33.77h-22.59v85.96h22.59v-35.73h30.21v35.73h22.72v-69.26h33.52v69.26h22.84v-69.26h33.4v69.26h45.31c6.38,0,11.69-.78,15.9-2.33,4.21-1.55,7.41-3.99,9.58-7.31,2.17-3.32,3.25-7.55,3.25-12.71l-.25-5.16ZM386.87,220.77h18.42c2.78,0,4.81.57,6.08,1.72,1.27,1.15,1.9,3.11,1.9,5.89v3.19c0,1.96-.29,3.54-.86,4.73-.57,1.19-1.43,2.05-2.58,2.58-1.15.53-2.7.8-4.67.8h-18.3v-18.91ZM414.99,266.82c0,1.96-.31,3.58-.92,4.85-.61,1.27-1.56,2.17-2.82,2.7-1.27.53-2.93.8-4.97.8h-19.4v-21h19.4c2.13,0,3.83.25,5.1.74,1.27.49,2.19,1.35,2.76,2.58s.86,2.87.86,4.91v4.42Z"/>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 637.8 496.06" preserveAspectRatio="xMidYMid meet">
+          <rect width="637.8" height="496.06" fill="#ffed00"/>
+          <path fill="#111111" d="M531.5,177.12H148.73l43.08-28.73c6.57-4.38,14.29-6.72,22.18-6.72h285.8s-140.7-93.84-140.7-93.84c-.7-.48-1.44-.95-2.15-1.42-21.73-14.64-54.36-14.64-76.09,0-.72.48-1.44.94-2.15,1.42L66.6,189.29h0c-4.68,3.2-8.98,6.93-12.8,11.12-41.01,45.63-8.95,118.29,52.5,118.53h382.77l-43.08,28.73c-6.57,4.38-14.29,6.72-22.19,6.72H138.01s140.71,93.84,140.71,93.84c.7.49,1.44.95,2.15,1.43,21.73,14.64,54.36,14.64,76.09,0,.72-.48,1.44-.94,2.14-1.42l212.1-141.45h0c4.69-3.21,9.01-6.96,12.84-11.16,11.73-12.89,18.35-30.15,18.33-47.58,0-39.16-31.73-70.9-70.87-70.9Z"/>
+          <path fill="#ffed00" d="M438.32,263.5c.08-5.32-1.27-9.39-4.05-12.22-2.79-2.82-7.04-4.81-12.77-5.96,4.83-.9,8.43-2.8,10.81-5.71,2.37-2.91,3.56-6.61,3.56-11.11v-3.44c0-4.83-.94-8.72-2.82-11.67-1.88-2.95-4.75-5.08-8.6-6.39-3.85-1.31-8.72-1.96-14.61-1.96h-157.8v33.77h-30.21v-33.77h-22.59v85.96h22.59v-35.73h30.21v35.73h22.72v-69.26h33.52v69.26h22.84v-69.26h33.4v69.26h45.31c6.38,0,11.69-.78,15.9-2.33,4.21-1.55,7.41-3.99,9.58-7.31,2.17-3.32,3.25-7.55,3.25-12.71l-.25-5.16ZM386.87,220.77h18.42c2.78,0,4.81.57,6.08,1.72,1.27,1.15,1.9,3.11,1.9,5.89v3.19c0,1.96-.29,3.54-.86,4.73-.57,1.19-1.43,2.05-2.58,2.58-1.15.53-2.7.8-4.67.8h-18.3v-18.91ZM414.99,266.82c0,1.96-.31,3.58-.92,4.85-.61,1.27-1.56,2.17-2.82,2.7-1.27.53-2.93.8-4.97.8h-19.4v-21h19.4c2.13,0,3.83.25,5.1.74,1.27.49,2.19,1.35,2.76,2.58s.86,2.87.86,4.91v4.42Z"/>
         </svg>
       </div>
-
-      <div class="brand__text">
+      <div class="brand__info">
         <div class="brand__company">HTB Baugesellschaft m.b.H.</div>
-        <div class="brand__subtitle">Schwingungsmesser · mm/s · m/s² · mm · Hz</div>
+        <div class="brand__subtitle">Schwingungsmesser · mm/s · m/s² · mm · X/Y/Z/Total</div>
       </div>
     </div>
   </header>
-
-  <!-- INSTALL (unten) -->
-  <section id="installBanner" class="installBanner" hidden>
-    <div class="installBanner__text">Als App installieren (PWA)</div>
-    <button id="installBtn" class="btn btn--accent" type="button">Installieren</button>
-  </section>
 
   <!-- STATUS -->
   <div id="statusBar" class="statusBar" hidden></div>
@@ -57,19 +48,15 @@
 
     <section class="card">
       <div class="card__title">Anzeige</div>
-
       <div class="mainValue">
         <div id="mainNum">0.00</div>
         <div id="mainSub">mm/s (Total)</div>
       </div>
-
       <div class="unitSwitch" role="group" aria-label="Einheit">
         <button class="unitBtn is-active" data-unit="vel" type="button">mm/s</button>
         <button class="unitBtn" data-unit="acc" type="button">m/s²</button>
         <button class="unitBtn" data-unit="disp" type="button">mm</button>
-        <button class="unitBtn" data-unit="freq" type="button">Hz</button>
       </div>
-
       <div class="grid">
         <button class="tile" data-series="x" type="button">
           <div class="tile__label">X</div>
@@ -91,7 +78,6 @@
           <div class="tile__value" id="tVal">0.00</div>
           <div class="tile__unit" id="unitT">mm/s</div>
         </button>
-
         <div class="tile">
           <div class="tile__label">Peak (Total)</div>
           <div class="tile__value" id="peakVal">0.00</div>
@@ -116,8 +102,9 @@
     </section>
 
     <section class="card">
-      <div class="card__title">Live-Verlauf (X/Y/Z)</div>
-      <canvas id="liveChart" height="560"></canvas>
+      <div class="card__title">Live-Verlauf (letzte 10 s) – X / Y / Z</div>
+      <canvas id="liveChart" height="360"></canvas>
+      <div id="liveAxis" class="axis"></div>
     </section>
 
     <section class="card">
@@ -129,19 +116,23 @@
       </div>
     </section>
 
-    <!-- ÖNORM Tabelle (sauber, ohne DIN) -->
     <section class="card">
-      <div class="card__title">Beurteilung – ÖNORM S 9020 (v₍res,max₎ in mm/s)</div>
+      <div class="card__title">Bewertung – ÖNORM S 9020</div>
       <table class="din">
-        <tr id="n0"><td>&lt; 5</td><td>Unbedenklich (auch empfindliche Gebäude)</td></tr>
-        <tr id="n1"><td>5 – 10</td><td>Empfindliche / erhaltenswerte Gebäude (Richtwert 5)</td></tr>
-        <tr id="n2"><td>10 – 20</td><td>Wohngebäude traditionell (Richtwert 10)</td></tr>
-        <tr id="n3"><td>20 – 30</td><td>Wohngebäude modern (Richtwert 20)</td></tr>
-        <tr id="n4"><td>&gt; 30</td><td>Industriebauten (Richtwert 30) überschritten</td></tr>
+        <thead>
+          <tr>
+            <th>Spitzenwert (mm/s)</th>
+            <th>Beurteilung</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="n0"><td>&lt; 5 mm/s</td><td>Klasse I – keine Schäden zu erwarten</td></tr>
+          <tr id="n1"><td>5 – 10 mm/s</td><td>Klasse II – leichte kosmetische Schäden möglich</td></tr>
+          <tr id="n2"><td>10 – 20 mm/s</td><td>Klasse III – leichte Schäden möglich</td></tr>
+          <tr id="n3"><td>20 – 30 mm/s</td><td>Klasse IV – mittlere Schäden möglich</td></tr>
+          <tr id="n4"><td>&gt; 30 mm/s</td><td>Klasse V – schwere Schäden möglich</td></tr>
+        </tbody>
       </table>
-      <div class="hint" style="text-align:left">
-        Hinweis: Smartphone‑Sensoren sind nicht rückführbar kalibriert. Richtwerte dienen als Orientierung.
-      </div>
     </section>
 
     <section class="card">
@@ -156,54 +147,80 @@
         <div class="results__title">Letzte Messung</div>
         <div id="resMeta" class="results__meta">—</div>
       </div>
-
+      <section class="card">
+        <div class="card__title">Diagramm</div>
+        <canvas id="resultChart" height="360"></canvas>
+        <div id="resAxis" class="axis"></div>
+      </section>
       <section class="card">
         <div class="card__title">Export</div>
-
         <div class="exportRow">
-          <label class="exportLabel" for="exportUnit">Einheit exportieren:</label>
+          <span class="exportLabel">Einheit:</span>
           <select id="exportUnit" class="select">
-            <option value="vel" selected>Geschwindigkeit (mm/s)</option>
-            <option value="acc">Beschleunigung (m/s²)</option>
-            <option value="disp">Verschiebung (mm)</option>
-            <option value="freq">Frequenz (Hz)</option>
+            <option value="vel">mm/s (Geschwindigkeit)</option>
+            <option value="acc">m/s² (Beschleunigung)</option>
+            <option value="disp">mm (Verschiebung)</option>
           </select>
         </div>
-
         <div class="buttons">
           <button id="csvBtn" class="btn btn--ok" type="button">CSV</button>
           <button id="pdfBtn" class="btn btn--ghost" type="button">PDF</button>
         </div>
-
-        <div class="hint">PDF öffnet den Druckdialog → „Als PDF speichern“ wählen.</div>
+        <div class="hint">PDF öffnet den Druckdialog → „Als PDF speichern" wählen.</div>
       </section>
     </section>
 
   </main>
 
+  <!-- TAB: ACHSEN -->
   <main id="tab-achsen" class="pane" role="tabpanel" hidden>
     <section class="card">
       <div class="card__title">Achsen-Ausrichtung</div>
       <div class="text">
-        <p><b>X</b>: links / rechts</p>
-        <p><b>Y</b>: Oberkante / Unterkante</p>
+        <p><b>X</b>: links / rechts (quer zum Gerät)</p>
+        <p><b>Y</b>: Richtung Oberkante / Unterkante</p>
         <p><b>Z</b>: senkrecht zum Display (rein/raus)</p>
+        <p class="hint">Verschiebung (mm) ist nur Orientierung – driftet bei doppelter Integration.</p>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card__title">ÖNORM S 9020 – Hinweise</div>
+      <div class="text">
+        <p>Die ÖNORM S 9020 bewertet Erschütterungseinwirkungen auf Bauwerke anhand der <b>Spitzenpartikelgeschwindigkeit (PPV)</b> in mm/s.</p>
+        <p>Maßgebend ist der <b>Maximalwert über alle 3 Achsen</b> (X/Y/Z).</p>
+        <p>Die Richtwerte gelten für empfindliche Wohngebäude in Normalkondition. Für historische Bauten oder besonders empfindliche Strukturen gelten strengere Werte.</p>
+        <p class="hint">Smartphone-Sensoren sind nicht kalibriert – Werte dienen der Orientierung, nicht als Messung nach Norm.</p>
       </div>
     </section>
   </main>
 
+  <!-- TAB: APP -->
   <main id="tab-app" class="pane" role="tabpanel" hidden>
     <section class="card">
-      <div class="card__title">Als App installieren</div>
+      <div class="card__title">Als App installieren (PWA)</div>
       <div class="text">
-        <p><b>Android (Chrome):</b> Menü (⋮) → „App installieren“</p>
-        <p><b>iPhone (Safari):</b> Teilen → „Zum Home‑Bildschirm“</p>
+        <p><b>Android (Chrome):</b> Menü (⋮) → „App installieren"</p>
+        <p><b>iPhone (Safari):</b> Teilen (□↑) → „Zum Home-Bildschirm"</p>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card__title">Über diese App</div>
+      <div class="text">
+        <p>HTB Schwingungsmesser v1.0<br/>PWA – läuft offline nach erstem Laden.</p>
+        <p>Bewertung nach <b>ÖNORM S 9020</b>.</p>
+        <p class="hint">Sensorwerte sind nicht kalibriert und ersetzen keine messtechnische Untersuchung.</p>
       </div>
     </section>
   </main>
 
+  <!-- INSTALL BANNER (unten) -->
+  <section id="installBanner" class="installBanner" hidden>
+    <div class="installBanner__text">Als App installieren (PWA)</div>
+    <button id="installBtn" class="btn btn--accent" type="button">Installieren</button>
+  </section>
+
   <footer class="footer">
-    © <b>HTB Baugesellschaft m.b.H.</b>
+    &copy; <b>HTB Baugesellschaft m.b.H.</b> – Schwingungsmesser PWA · Sensorwerte nicht kalibriert
   </footer>
 
   <script src="app.js"></script>
