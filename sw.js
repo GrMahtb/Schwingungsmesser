@@ -1,4 +1,4 @@
-const CACHE = 'htb-vibro-v300';
+const CACHE = 'htb-vibro-v1000';
 
 const ASSETS = [
   './',
