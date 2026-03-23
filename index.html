@@ -28,7 +28,7 @@
       </div>
       <div class="brand__info">
         <div class="brand__company">HTB Baugesellschaft m.b.H.</div>
-        <div class="brand__subtitle">Schwingungsmesser · mm/s · m/s² · mm · X/Y/Z/Total</div>
+        <div class="brand__subtitle">Schwingungsmesser · mm/s · m/s² · mm · Hz · Live 30 s</div>
       </div>
     </div>
   </header>
@@ -39,13 +39,52 @@
   <!-- TABS -->
   <nav class="tabs" role="tablist" aria-label="Menü">
     <button class="tab is-active" data-tab="messen" type="button">Messen</button>
+    <button class="tab" data-tab="filter" type="button">Filter</button>
     <button class="tab" data-tab="achsen" type="button">Achsen</button>
     <button class="tab" data-tab="app" type="button">App</button>
   </nav>
 
-  <!-- TAB: MESSEN -->
+  <!-- ══════════ TAB: MESSEN ══════════ -->
   <main id="tab-messen" class="pane is-active" role="tabpanel">
 
+    <!-- 1. STEUERUNG (ganz oben) -->
+    <section class="card">
+      <div class="card__title">Steuerung</div>
+      <div class="buttons">
+        <button id="iosPermBtn" class="btn btn--warn" type="button" hidden>iOS Sensorerlaubnis</button>
+        <button id="startBtn"   class="btn btn--accent" type="button">Start</button>
+        <button id="resetBtn"   class="btn btn--ghost"  type="button">Reset</button>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Filter:</span>
+        <select id="filterSelect" class="select select--sm">
+          <option value="raw">Roh (kein Filter)</option>
+          <option value="hp1"  selected>Tiefpass-Bereinigung (HP 1 Hz)</option>
+          <option value="bau">Baustelle allg. (1–25 Hz)</option>
+          <option value="pfahl">Pfahlrammung (1–8 Hz)</option>
+          <option value="verd">Verdichter (8–25 Hz)</option>
+          <option value="verk">Verkehr (1–15 Hz)</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- 2. LIVE-VERLAUF (30 s) -->
+    <section class="card">
+      <div class="card__title">Live-Verlauf – letzte 30 Sekunden (X / Y / Z)</div>
+      <canvas id="liveChart" height="380"></canvas>
+      <div id="liveAxis" class="axis"></div>
+    </section>
+
+    <!-- 3. BEWERTUNG ÖNORM S 9020 -->
+    <section class="card">
+      <div class="card__title">Bewertung – ÖNORM S 9020</div>
+      <div id="oenormUnitHint" class="oenorm-hint"></div>
+      <table class="din" id="oenormTable">
+        <!-- wird per JS befüllt je nach Einheit -->
+      </table>
+    </section>
+
+    <!-- 4. ANZEIGE -->
     <section class="card">
       <div class="card__title">Anzeige</div>
       <div class="mainValue">
@@ -53,45 +92,46 @@
         <div id="mainSub">mm/s (Total)</div>
       </div>
       <div class="unitSwitch" role="group" aria-label="Einheit">
-        <button class="unitBtn is-active" data-unit="vel" type="button">mm/s</button>
-        <button class="unitBtn" data-unit="acc" type="button">m/s²</button>
-        <button class="unitBtn" data-unit="disp" type="button">mm</button>
+        <button class="unitBtn is-active" data-unit="vel"  type="button">mm/s</button>
+        <button class="unitBtn"           data-unit="acc"  type="button">m/s²</button>
+        <button class="unitBtn"           data-unit="disp" type="button">mm</button>
+        <button class="unitBtn"           data-unit="hz"   type="button">Hz</button>
       </div>
       <div class="grid">
-        <button class="tile" data-series="x" type="button">
+        <div class="tile">
           <div class="tile__label">X</div>
           <div class="tile__value" id="xVal">0.00</div>
-          <div class="tile__unit" id="unitX">mm/s</div>
-        </button>
-        <button class="tile" data-series="y" type="button">
+          <div class="tile__unit"  id="unitX">mm/s</div>
+        </div>
+        <div class="tile">
           <div class="tile__label">Y</div>
           <div class="tile__value" id="yVal">0.00</div>
-          <div class="tile__unit" id="unitY">mm/s</div>
-        </button>
-        <button class="tile" data-series="z" type="button">
+          <div class="tile__unit"  id="unitY">mm/s</div>
+        </div>
+        <div class="tile">
           <div class="tile__label">Z</div>
           <div class="tile__value" id="zVal">0.00</div>
-          <div class="tile__unit" id="unitZ">mm/s</div>
-        </button>
-        <button class="tile" data-series="t" type="button">
+          <div class="tile__unit"  id="unitZ">mm/s</div>
+        </div>
+        <div class="tile">
           <div class="tile__label">Total</div>
           <div class="tile__value" id="tVal">0.00</div>
-          <div class="tile__unit" id="unitT">mm/s</div>
-        </button>
+          <div class="tile__unit"  id="unitT">mm/s</div>
+        </div>
         <div class="tile">
-          <div class="tile__label">Peak (Total)</div>
+          <div class="tile__label">Peak</div>
           <div class="tile__value" id="peakVal">0.00</div>
-          <div class="tile__unit" id="unitPeak">mm/s</div>
+          <div class="tile__unit"  id="unitPeak">mm/s</div>
         </div>
         <div class="tile">
-          <div class="tile__label">RMS (Total)</div>
+          <div class="tile__label">RMS</div>
           <div class="tile__value" id="rmsVal">0.00</div>
-          <div class="tile__unit" id="unitRms">mm/s</div>
+          <div class="tile__unit"  id="unitRms">mm/s</div>
         </div>
         <div class="tile">
-          <div class="tile__label">Events</div>
-          <div class="tile__value" id="evtVal">0</div>
-          <div class="tile__unit">#</div>
+          <div class="tile__label">Dom. Freq.</div>
+          <div class="tile__value" id="freqVal">—</div>
+          <div class="tile__unit">Hz</div>
         </div>
         <div class="tile">
           <div class="tile__label">Dauer</div>
@@ -101,40 +141,7 @@
       </div>
     </section>
 
-    <section class="card">
-      <div class="card__title">Live-Verlauf (letzte 10 s) – X / Y / Z</div>
-      <canvas id="liveChart" height="360"></canvas>
-      <div id="liveAxis" class="axis"></div>
-    </section>
-
-    <section class="card">
-      <div class="card__title">Steuerung</div>
-      <div class="buttons">
-        <button id="iosPermBtn" class="btn btn--warn" type="button" hidden>iOS Sensorerlaubnis</button>
-        <button id="startBtn" class="btn btn--accent" type="button">Start</button>
-        <button id="resetBtn" class="btn btn--ghost" type="button">Reset</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card__title">Bewertung – ÖNORM S 9020</div>
-      <table class="din">
-        <thead>
-          <tr>
-            <th>Spitzenwert (mm/s)</th>
-            <th>Beurteilung</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr id="n0"><td>&lt; 5 mm/s</td><td>Klasse I – keine Schäden zu erwarten</td></tr>
-          <tr id="n1"><td>5 – 10 mm/s</td><td>Klasse II – leichte kosmetische Schäden möglich</td></tr>
-          <tr id="n2"><td>10 – 20 mm/s</td><td>Klasse III – leichte Schäden möglich</td></tr>
-          <tr id="n3"><td>20 – 30 mm/s</td><td>Klasse IV – mittlere Schäden möglich</td></tr>
-          <tr id="n4"><td>&gt; 30 mm/s</td><td>Klasse V – schwere Schäden möglich</td></tr>
-        </tbody>
-      </table>
-    </section>
-
+    <!-- DEBUG -->
     <section class="card">
       <details class="debug">
         <summary>Sensor Debug (ausklappen)</summary>
@@ -142,28 +149,32 @@
       </details>
     </section>
 
+    <!-- ERGEBNIS nach Stop -->
     <section id="results" class="results" hidden>
       <div class="results__head">
         <div class="results__title">Letzte Messung</div>
         <div id="resMeta" class="results__meta">—</div>
       </div>
+
       <section class="card">
-        <div class="card__title">Diagramm</div>
-        <canvas id="resultChart" height="360"></canvas>
+        <div class="card__title">Diagramm – X / Y / Z</div>
+        <canvas id="resultChart" height="380"></canvas>
         <div id="resAxis" class="axis"></div>
       </section>
+
       <section class="card">
         <div class="card__title">Export</div>
         <div class="exportRow">
           <span class="exportLabel">Einheit:</span>
           <select id="exportUnit" class="select">
-            <option value="vel">mm/s (Geschwindigkeit)</option>
-            <option value="acc">m/s² (Beschleunigung)</option>
-            <option value="disp">mm (Verschiebung)</option>
+            <option value="vel">mm/s – Geschwindigkeit</option>
+            <option value="acc">m/s² – Beschleunigung</option>
+            <option value="disp">mm – Verschiebung</option>
+            <option value="hz">Hz – Frequenz (dominante)</option>
           </select>
         </div>
         <div class="buttons">
-          <button id="csvBtn" class="btn btn--ok" type="button">CSV</button>
+          <button id="csvBtn" class="btn btn--ok"    type="button">CSV</button>
           <button id="pdfBtn" class="btn btn--ghost" type="button">PDF</button>
         </div>
         <div class="hint">PDF öffnet den Druckdialog → „Als PDF speichern" wählen.</div>
@@ -172,29 +183,84 @@
 
   </main>
 
-  <!-- TAB: ACHSEN -->
+  <!-- ══════════ TAB: FILTER ══════════ -->
+  <main id="tab-filter" class="pane" role="tabpanel" hidden>
+    <section class="card">
+      <div class="card__title">Filter-Auswahl</div>
+      <div class="filter-info">
+        <div class="filter-info__item">
+          <div class="filter-info__name">Roh (kein Filter)</div>
+          <div class="filter-info__desc">Rohdaten direkt vom Sensor. Enthält DC-Offset und alle Frequenzen. Nur für Diagnose geeignet.</div>
+        </div>
+        <div class="filter-info__item">
+          <div class="filter-info__name">Tiefpass-Bereinigung (HP 1 Hz)</div>
+          <div class="filter-info__desc">Hochpassfilter ab 1 Hz entfernt DC-Drift und statische Beschleunigung (Gravitation). Standard für allgemeine Schwingungsmessung.</div>
+          <div class="filter-info__range">Durchlassbereich: 1 – 30 Hz</div>
+        </div>
+        <div class="filter-info__item">
+          <div class="filter-info__name">Baustelle allgemein (1–25 Hz)</div>
+          <div class="filter-info__desc">Bandpass für typische Baustellenschwingungen: Bagger, Rammen, Abbruch, schwere Fahrzeuge.</div>
+          <div class="filter-info__range">Durchlassbereich: 1 – 25 Hz</div>
+        </div>
+        <div class="filter-info__item">
+          <div class="filter-info__name">Pfahlrammung (1–8 Hz)</div>
+          <div class="filter-info__desc">Enge Bandpassfilterung für die typischen niedrigen Frequenzen bei Ramm- und Vibrationspfählen. Unterdrückt hochfrequentes Rauschen.</div>
+          <div class="filter-info__range">Durchlassbereich: 1 – 8 Hz</div>
+        </div>
+        <div class="filter-info__item">
+          <div class="filter-info__name">Verdichter / Rüttelplatte (8–25 Hz)</div>
+          <div class="filter-info__desc">Für Oberflächen- und Tiefenverdichter typische Arbeitsfrequenzen. Filtert tieffrequente Störungen heraus.</div>
+          <div class="filter-info__range">Durchlassbereich: 8 – 25 Hz</div>
+        </div>
+        <div class="filter-info__item">
+          <div class="filter-info__name">Verkehr (1–15 Hz)</div>
+          <div class="filter-info__desc">Schwer- und Straßenverkehr auf Bestandsstraßen erzeugt primär Frequenzen unter 15 Hz. Reduziert hochfrequentes Werkzeug-Rauschen.</div>
+          <div class="filter-info__range">Durchlassbereich: 1 – 15 Hz</div>
+        </div>
+      </div>
+      <div class="hint">Filter wirken live auf Messung und Aufzeichnung. Wechsel während der Messung möglich.</div>
+    </section>
+
+    <section class="card">
+      <div class="card__title">Hinweis Frequenz-Schätzung (Hz)</div>
+      <div class="text">
+        <p>Die angezeigte Frequenz ist eine <b>Zero-Crossing-Schätzung</b> aus dem Total-Signal der letzten 2 Sekunden. Sie gibt die <b>dominante Hauptfrequenz</b> an.</p>
+        <p>Für Baustellenquellen typische Frequenzbereiche:</p>
+        <table class="din" style="margin-top:8px">
+          <tr><td><b>Pfahlrammung</b></td><td>1 – 8 Hz</td></tr>
+          <tr><td><b>Bagger / Abbruch</b></td><td>2 – 15 Hz</td></tr>
+          <tr><td><b>Schwerlast-Verkehr</b></td><td>2 – 15 Hz</td></tr>
+          <tr><td><b>Verdichter / Rüttelplatte</b></td><td>8 – 30 Hz</td></tr>
+          <tr><td><b>Sprengung</b></td><td>1 – 100 Hz (Impuls)</td></tr>
+          <tr><td><b>Smartphone-Rauschen</b></td><td>&gt; 25 Hz</td></tr>
+        </table>
+        <p class="hint">Nyquist-Grenze bei ca. 60 fps = max. 30 Hz messbar. Höhere Frequenzen werden durch den Filter abgeschnitten.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ══════════ TAB: ACHSEN ══════════ -->
   <main id="tab-achsen" class="pane" role="tabpanel" hidden>
     <section class="card">
       <div class="card__title">Achsen-Ausrichtung</div>
       <div class="text">
         <p><b>X</b>: links / rechts (quer zum Gerät)</p>
         <p><b>Y</b>: Richtung Oberkante / Unterkante</p>
-        <p><b>Z</b>: senkrecht zum Display (rein/raus)</p>
-        <p class="hint">Verschiebung (mm) ist nur Orientierung – driftet bei doppelter Integration.</p>
+        <p><b>Z</b>: senkrecht zum Display (rein / raus)</p>
+        <p class="hint">Verschiebung (mm) driftet bei doppelter Integration – nur Orientierung!</p>
       </div>
     </section>
     <section class="card">
-      <div class="card__title">ÖNORM S 9020 – Hinweise</div>
+      <div class="card__title">ÖNORM S 9020 – Grundlagen</div>
       <div class="text">
-        <p>Die ÖNORM S 9020 bewertet Erschütterungseinwirkungen auf Bauwerke anhand der <b>Spitzenpartikelgeschwindigkeit (PPV)</b> in mm/s.</p>
-        <p>Maßgebend ist der <b>Maximalwert über alle 3 Achsen</b> (X/Y/Z).</p>
-        <p>Die Richtwerte gelten für empfindliche Wohngebäude in Normalkondition. Für historische Bauten oder besonders empfindliche Strukturen gelten strengere Werte.</p>
-        <p class="hint">Smartphone-Sensoren sind nicht kalibriert – Werte dienen der Orientierung, nicht als Messung nach Norm.</p>
+        <p>Die ÖNORM S 9020 bewertet Erschütterungseinwirkungen auf Bauwerke anhand der <b>Spitzenpartikelgeschwindigkeit (PPV)</b> in mm/s, gemessen an der Gebäudegründung oder Decke.</p>
+        <p>Maßgebend ist grundsätzlich die <b>Geschwindigkeit (mm/s)</b>. Frequenz-Gewichtung ist in der Norm vorgesehen, vereinfachend werden hier die pauschalen Richtwerte angewendet.</p>
+        <p class="hint">Smartphone-Sensoren sind nicht kalibriert. Ergebnisse dienen der Orientierung und ersetzen keine normgerechte Messung.</p>
       </div>
     </section>
   </main>
 
-  <!-- TAB: APP -->
+  <!-- ══════════ TAB: APP ══════════ -->
   <main id="tab-app" class="pane" role="tabpanel" hidden>
     <section class="card">
       <div class="card__title">Als App installieren (PWA)</div>
@@ -206,9 +272,10 @@
     <section class="card">
       <div class="card__title">Über diese App</div>
       <div class="text">
-        <p>HTB Schwingungsmesser v1.0<br/>PWA – läuft offline nach erstem Laden.</p>
+        <p>HTB Schwingungsmesser v1.1 – PWA (läuft offline).</p>
         <p>Bewertung nach <b>ÖNORM S 9020</b>.</p>
-        <p class="hint">Sensorwerte sind nicht kalibriert und ersetzen keine messtechnische Untersuchung.</p>
+        <p>Einheiten: mm/s · m/s² · mm · Hz</p>
+        <p class="hint">Nicht kalibriert – kein Ersatz für messtechnische Untersuchung.</p>
       </div>
     </section>
   </main>
