@@ -1,20 +1,18 @@
 'use strict';
-console.log('APP VERSION v2026-03-26-event-driven loaded');
+console.log('APP VERSION v2026-03-23-no-disp loaded');
 
 // ===================== KONFIG =====================
-const SAMPLE_RATE = 100; // Erhöht: Android liefert oft 100 Hz, besser als 60
-const WIN_SEC     = 30;
-const WINDOW_LEN  = WIN_SEC * SAMPLE_RATE;
+const SAMPLE_RATE = 60;
+const WIN_SEC = 30;
+const WINDOW_LEN = WIN_SEC * SAMPLE_RATE;
 
 const FREQ_WIN_SEC = 2;
-const FREQ_WIN     = FREQ_WIN_SEC * SAMPLE_RATE;
+const FREQ_WIN = FREQ_WIN_SEC * SAMPLE_RATE;
 const FREQ_UPDATE_EVERY_N_FRAMES = 10;
 
 const COLORS = { x:'#ff4444', y:'#00cc66', z:'#4499ff' };
 
-// Leak-Faktor: jetzt als "pro Sekunde" definiert, wird per dt skaliert.
-// 0.406 /s = entspricht dem alten 0.985^60 (gleiche Zeitkonstante ~1.1 s)
-const LEAK_V_PER_SEC = 0.406;
+const LEAK_V = 0.985;
 
 const FILTERS = {
   raw:   { hpAlpha: 0.000, lpAlpha: 1.000, label:'Roh (kein Filter)' },
@@ -177,6 +175,7 @@ function updateOenormHighlight(val) {
   const cfg = OENORM[activeUnit] || OENORM.vel;
 
   if (!cfg.bounds) {
+    // Hz-Modus
     let activeId = null;
     if      (val < 1)   activeId = 'n4';
     else if (val <= 8)  activeId = 'n0';
@@ -210,16 +209,16 @@ let noDataTimer      = null;
 let activeUnit       = 'vel';
 let activeFilter     = dom.filterSelect?.value || 'hp1';
 let motionEventCount = 0;
-let rawX = 0, rawY = 0, rawZ = 0; // nur für Debug-Panel
+let rawX = 0, rawY = 0, rawZ = 0;
 
 // Filter-Zustand
 const hp = { x:0, y:0, z:0, px:0, py:0, pz:0 };
 const lp = { x:0, y:0, z:0 };
 
-// Integrator
-const intg = { vx:0, vy:0, vz:0 };
+// Integrator (nur Geschwindigkeit, kein Weg mehr)
+const intg = { vx:0, vy:0, vz:0, prev:null };
 
-// Ringbuffer
+// Ringbuffer: vel + acc + hz (kein disp mehr)
 const ring = {
   ptr: 0, len: 0,
   vel: {
@@ -254,7 +253,7 @@ const freqWin = {
 let hzNow = { x:0, y:0, z:0, t:0 };
 let hzFrameCounter = 0;
 
-// Stats
+// Stats: nur noch vel / acc / hz
 const stats = {
   vel: { peak:0, sum2:0, cnt:0 },
   acc: { peak:0, sum2:0, cnt:0 },
@@ -275,6 +274,7 @@ let rec       = null;
 function applyFilter(ax, ay, az) {
   const cfg = FILTERS[activeFilter] || FILTERS.hp1;
 
+  // Hochpass
   let fx, fy, fz;
   if (cfg.hpAlpha <= 0.0001) {
     fx = ax; fy = ay; fz = az;
@@ -286,6 +286,7 @@ function applyFilter(ax, ay, az) {
     hp.px = ax; hp.py = ay; hp.pz = az;
   }
 
+  // Tiefpass
   if (cfg.lpAlpha >= 0.999) return { fx, fy, fz };
   const a = cfg.lpAlpha;
   lp.x = a * lp.x + (1 - a) * fx;
@@ -295,25 +296,24 @@ function applyFilter(ax, ay, az) {
 }
 
 function integrate(fx, fy, fz, dt) {
-  // Leak-Faktor wird per dt skaliert → Zeitkonstante unabhängig von Sample-Rate
-  const leak = Math.pow(LEAK_V_PER_SEC, dt);
-  intg.vx = (intg.vx + fx * dt) * leak;
-  intg.vy = (intg.vy + fy * dt) * leak;
-  intg.vz = (intg.vz + fz * dt) * leak;
+  intg.vx = (intg.vx + fx * dt) * LEAK_V;
+  intg.vy = (intg.vy + fy * dt) * LEAK_V;
+  intg.vz = (intg.vz + fz * dt) * LEAK_V;
 }
 
-// Zero-Crossing Frequenz-Schätzung
+// Zero-Crossing Frequenz-Schätzung mit Deadband + Amplitudencheck
 function estimateHzFromWindow(arr, len, ptr) {
   if (len < 10) return 0;
 
+  // Amplitudencheck gegen Rauschen
   let meanAbs = 0;
   for (let i = 0; i < len; i++) {
     meanAbs += Math.abs(arr[(ptr - len + i + FREQ_WIN) % FREQ_WIN]);
   }
   meanAbs /= len;
-  if (meanAbs < 0.15) return 0;
+  if (meanAbs < 0.15) return 0; // mm/s Schwelle
 
-  const eps = 0.05;
+  const eps = 0.05; // Deadband mm/s
   let crossings = 0;
   let prev = arr[(ptr - len + FREQ_WIN) % FREQ_WIN];
 
@@ -382,9 +382,11 @@ function drawMultiPanel(ctx, kind, source) {
     const pw   = W - mL - mR;
     const ph   = panH - mT - mB;
 
+    // Panel-Hintergrund
     ctx.fillStyle = (pi % 2 === 0) ? '#0b0b0c' : '#0d0d0f';
     ctx.fillRect(0, offY, W, panH);
 
+    // Trennlinie
     if (pi > 0) {
       ctx.strokeStyle = '#2a2a2d';
       ctx.lineWidth   = 1;
@@ -401,6 +403,7 @@ function drawMultiPanel(ctx, kind, source) {
       return;
     }
 
+    // Min / Max
     let mn = Infinity, mx = -Infinity;
     for (let i = 0; i < n; i++) {
       const v = source.get(kind, s, i);
@@ -416,12 +419,14 @@ function drawMultiPanel(ctx, kind, source) {
     const span = (yMax - yMin) || 1;
     const toY  = (v) => offY + mT + ph - ((v - yMin) / span) * ph;
 
+    // Grid horizontal
     ctx.lineWidth = 1;
     for (let g = 0; g <= 4; g++) {
       ctx.strokeStyle = '#1e1e22';
       const gy = offY + mT + (g / 4) * ph;
       ctx.beginPath(); ctx.moveTo(mL, gy); ctx.lineTo(mL + pw, gy); ctx.stroke();
     }
+    // Grid vertikal
     for (let g = 0; g <= 6; g++) {
       ctx.strokeStyle = '#1a1a1e';
       const gx = mL + (g / 6) * pw;
@@ -430,12 +435,14 @@ function drawMultiPanel(ctx, kind, source) {
       ctx.stroke();
     }
 
+    // Nulllinie
     const y0 = toY(0);
     if (y0 >= offY + mT && y0 <= offY + mT + ph) {
       ctx.strokeStyle = '#3a3a42';
       ctx.beginPath(); ctx.moveTo(mL, y0); ctx.lineTo(mL + pw, y0); ctx.stroke();
     }
 
+    // Y-Ticks (min / mid / max)
     ctx.fillStyle   = '#6c6c74';
     ctx.font        = '9px system-ui';
     ctx.textAlign   = 'right';
@@ -446,6 +453,7 @@ function drawMultiPanel(ctx, kind, source) {
     });
     ctx.textAlign = 'left';
 
+    // Achsenbeschriftung
     ctx.fillStyle = COLORS[s];
     ctx.font      = 'bold 11px system-ui';
     ctx.fillText(labels[pi], 6, offY + mT + 10);
@@ -454,6 +462,7 @@ function drawMultiPanel(ctx, kind, source) {
     ctx.font      = '9px system-ui';
     ctx.fillText(unitLabel(kind), 6, offY + mT + 22);
 
+    // Zeitachse (nur letztes Panel)
     if (pi === 2) {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#6c6c74';
@@ -466,6 +475,7 @@ function drawMultiPanel(ctx, kind, source) {
       ctx.textAlign = 'left';
     }
 
+    // Kurve
     ctx.strokeStyle = COLORS[s];
     ctx.lineWidth   = 1.8;
     ctx.beginPath();
@@ -481,7 +491,7 @@ function drawMultiPanel(ctx, kind, source) {
 
 function drawLive() {
   if (!liveCtx) return;
-  const kind = activeUnit;
+  const kind = activeUnit; // vel | acc | hz – alle haben echte Zeitreihen
   const src  = {
     len: ring.len,
     get: (k, axis, i) => {
@@ -503,11 +513,8 @@ function drawResult(data) {
 }
 
 // ===================== SENSOR =====================
-// *** KERNÄNDERUNG: Alle Physik-Berechnungen passieren hier,
-//     synchron zum echten Sensor-Takt (e.interval), NICHT im RAF-Loop! ***
 function onMotion(e) {
   motionEventCount++;
-
   const a = (
     e.acceleration &&
     e.acceleration.x != null &&
@@ -515,108 +522,9 @@ function onMotion(e) {
     e.acceleration.z != null
   ) ? e.acceleration : e.accelerationIncludingGravity;
   if (!a) return;
-
   rawX = Number(a.x) || 0;
   rawY = Number(a.y) || 0;
   rawZ = Number(a.z) || 0;
-
-  // Nur rechnen wenn Messung aktiv
-  if (!running) return;
-
-  // *** dt aus e.interval: echter Sensor-Takt, unabhängig von Bildschirm-FPS ***
-  const dt = Math.min((e.interval > 0 ? e.interval : 16.67) / 1000, 0.05);
-
-  // Filtern
-  const { fx, fy, fz } = applyFilter(rawX, rawY, rawZ);
-
-  // Integration → Geschwindigkeit (mm/s) mit zeitkonstanten-stabilem Leak
-  integrate(fx, fy, fz, dt);
-  const velX = intg.vx * 1000;
-  const velY = intg.vy * 1000;
-  const velZ = intg.vz * 1000;
-  const velT = Math.sqrt(velX*velX + velY*velY + velZ*velZ);
-
-  // Beschleunigung (m/s²)
-  const accX = fx, accY = fy, accZ = fz;
-  const accT = Math.sqrt(accX*accX + accY*accY + accZ*accZ);
-
-  // Frequenz-Fenster befüllen
-  freqWin.x[freqWin.ptr] = velX;
-  freqWin.y[freqWin.ptr] = velY;
-  freqWin.z[freqWin.ptr] = velZ;
-  freqWin.t[freqWin.ptr] = velT;
-  freqWin.ptr = (freqWin.ptr + 1) % FREQ_WIN;
-  if (freqWin.len < FREQ_WIN) freqWin.len++;
-
-  // Frequenz schätzen (nicht bei jedem Event)
-  hzFrameCounter++;
-  if (hzFrameCounter >= FREQ_UPDATE_EVERY_N_FRAMES) {
-    hzFrameCounter = 0;
-    hzNow = {
-      x: estimateHzFromWindow(freqWin.x, freqWin.len, freqWin.ptr),
-      y: estimateHzFromWindow(freqWin.y, freqWin.len, freqWin.ptr),
-      z: estimateHzFromWindow(freqWin.z, freqWin.len, freqWin.ptr),
-      t: estimateHzFromWindow(freqWin.t, freqWin.len, freqWin.ptr),
-    };
-  }
-
-  // Ringbuffer befüllen
-  ring.vel.x[ring.ptr]=velX; ring.vel.y[ring.ptr]=velY;
-  ring.vel.z[ring.ptr]=velZ; ring.vel.t[ring.ptr]=velT;
-  ring.acc.x[ring.ptr]=accX; ring.acc.y[ring.ptr]=accY;
-  ring.acc.z[ring.ptr]=accZ; ring.acc.t[ring.ptr]=accT;
-  ring.hz.x[ring.ptr]=hzNow.x; ring.hz.y[ring.ptr]=hzNow.y;
-  ring.hz.z[ring.ptr]=hzNow.z; ring.hz.t[ring.ptr]=hzNow.t;
-  ring.ptr = (ring.ptr + 1) % WINDOW_LEN;
-  if (ring.len < WINDOW_LEN) ring.len++;
-
-  // Stats
-  stats.vel.peak  = Math.max(stats.vel.peak, velT);
-  stats.vel.sum2 += velT * velT;
-  stats.vel.cnt++;
-  stats.acc.peak  = Math.max(stats.acc.peak, accT);
-  stats.acc.sum2 += accT * accT;
-  stats.acc.cnt++;
-  stats.hz.peak  = Math.max(stats.hz.peak, hzNow.t);
-  stats.hz.sum  += hzNow.t;
-  stats.hz.cnt++;
-
-  // Last-Packs für Anzeige (wird vom RAF-Loop gelesen)
-  last.vel = {
-    x: velX, y: velY, z: velZ, t: velT,
-    peak: stats.vel.peak,
-    rms:  Math.sqrt(stats.vel.sum2 / Math.max(1, stats.vel.cnt)),
-  };
-  last.acc = {
-    x: accX, y: accY, z: accZ, t: accT,
-    peak: stats.acc.peak,
-    rms:  Math.sqrt(stats.acc.sum2 / Math.max(1, stats.acc.cnt)),
-  };
-  last.hz = {
-    x: hzNow.x, y: hzNow.y, z: hzNow.z, t: hzNow.t,
-    peak: stats.hz.peak,
-    rms:  stats.hz.cnt ? (stats.hz.sum / stats.hz.cnt) : 0,
-  };
-
-  // Debug-Panel
-  if (dom.debugPanel) {
-    dom.debugPanel.textContent =
-      `raw  ax=${rawX.toFixed(3)} ay=${rawY.toFixed(3)} az=${rawZ.toFixed(3)} m/s²\n` +
-      `filt fx=${accX.toFixed(3)} fy=${accY.toFixed(3)} fz=${accZ.toFixed(3)} m/s²  filter=${activeFilter}\n` +
-      `vel  x=${velX.toFixed(2)} y=${velY.toFixed(2)} z=${velZ.toFixed(2)} total=${velT.toFixed(2)} mm/s\n` +
-      `hz   x=${hzNow.x.toFixed(2)} y=${hzNow.y.toFixed(2)} z=${hzNow.z.toFixed(2)} t=${hzNow.t.toFixed(2)} Hz\n` +
-      `dt=${(dt*1000).toFixed(1)} ms  (Sensor e.interval)`;
-  }
-
-  // Recording
-  if (rec && rec.vel.t.length < 12000) {
-    rec.vel.x.push(velX); rec.vel.y.push(velY);
-    rec.vel.z.push(velZ); rec.vel.t.push(velT);
-    rec.acc.x.push(accX); rec.acc.y.push(accY);
-    rec.acc.z.push(accZ); rec.acc.t.push(accT);
-    rec.hz.x.push(hzNow.x); rec.hz.y.push(hzNow.y);
-    rec.hz.z.push(hzNow.z); rec.hz.t.push(hzNow.t);
-  }
 }
 window.addEventListener('devicemotion', onMotion, { passive: true });
 
@@ -645,6 +553,7 @@ function resetAll() {
   hp.x=hp.y=hp.z=0; hp.px=hp.py=hp.pz=0;
   lp.x=lp.y=lp.z=0;
   intg.vx=intg.vy=intg.vz=0;
+  intg.prev=null;
 
   stats.vel = { peak:0, sum2:0, cnt:0 };
   stats.acc = { peak:0, sum2:0, cnt:0 };
@@ -688,7 +597,7 @@ function startMeasurement() {
       typeof DeviceMotionEvent !== 'undefined' &&
       typeof DeviceMotionEvent.requestPermission === 'function' &&
       motionEventCount === 0) {
-    setStatus('iPhone: erst "iOS Sensorerlaubnis" drücken.', 'is-error');
+    setStatus('iPhone: erst „iOS Sensorerlaubnis" drücken.', 'is-error');
     return;
   }
 
@@ -775,17 +684,118 @@ dom.startBtn?.addEventListener('click', () =>
 );
 dom.resetBtn?.addEventListener('click', resetAll);
 
-// ===================== LOOP (nur Anzeige!) =====================
-// *** Keine Physik mehr hier – nur noch Zeichnen und Display-Update ***
+// ===================== LOOP =====================
 function loop() {
   if (!running) return;
   rafId = requestAnimationFrame(loop);
+
+  const now = performance.now();
+  const dt  = Math.min((now - (intg.prev ?? now)) / 1000, 0.05);
+  intg.prev = now;
+
+  // Filtern
+  const { fx, fy, fz } = applyFilter(rawX, rawY, rawZ);
+
+  // Integration → Geschwindigkeit (mm/s)
+  integrate(fx, fy, fz, dt);
+  const velX = intg.vx * 1000;
+  const velY = intg.vy * 1000;
+  const velZ = intg.vz * 1000;
+  const velT = Math.sqrt(velX*velX + velY*velY + velZ*velZ);
+
+  // Beschleunigung (m/s²)
+  const accX = fx, accY = fy, accZ = fz;
+  const accT = Math.sqrt(accX*accX + accY*accY + accZ*accZ);
+
+  // Frequenz-Fenster befüllen (aus vel)
+  freqWin.x[freqWin.ptr] = velX;
+  freqWin.y[freqWin.ptr] = velY;
+  freqWin.z[freqWin.ptr] = velZ;
+  freqWin.t[freqWin.ptr] = velT;
+  freqWin.ptr = (freqWin.ptr + 1) % FREQ_WIN;
+  if (freqWin.len < FREQ_WIN) freqWin.len++;
+
+  // Frequenz schätzen (nicht jedes Frame)
+  hzFrameCounter++;
+  if (hzFrameCounter >= FREQ_UPDATE_EVERY_N_FRAMES) {
+    hzFrameCounter = 0;
+    hzNow = {
+      x: estimateHzFromWindow(freqWin.x, freqWin.len, freqWin.ptr),
+      y: estimateHzFromWindow(freqWin.y, freqWin.len, freqWin.ptr),
+      z: estimateHzFromWindow(freqWin.z, freqWin.len, freqWin.ptr),
+      t: estimateHzFromWindow(freqWin.t, freqWin.len, freqWin.ptr),
+    };
+  }
+
+  // Ringbuffer (vel / acc / hz)
+  ring.vel.x[ring.ptr]=velX; ring.vel.y[ring.ptr]=velY;
+  ring.vel.z[ring.ptr]=velZ; ring.vel.t[ring.ptr]=velT;
+
+  ring.acc.x[ring.ptr]=accX; ring.acc.y[ring.ptr]=accY;
+  ring.acc.z[ring.ptr]=accZ; ring.acc.t[ring.ptr]=accT;
+
+  ring.hz.x[ring.ptr]=hzNow.x; ring.hz.y[ring.ptr]=hzNow.y;
+  ring.hz.z[ring.ptr]=hzNow.z; ring.hz.t[ring.ptr]=hzNow.t;
+
+  ring.ptr = (ring.ptr + 1) % WINDOW_LEN;
+  if (ring.len < WINDOW_LEN) ring.len++;
+
+  // Stats
+  stats.vel.peak  = Math.max(stats.vel.peak, velT);
+  stats.vel.sum2 += velT * velT;
+  stats.vel.cnt++;
+
+  stats.acc.peak  = Math.max(stats.acc.peak, accT);
+  stats.acc.sum2 += accT * accT;
+  stats.acc.cnt++;
+
+  stats.hz.peak  = Math.max(stats.hz.peak, hzNow.t);
+  stats.hz.sum  += hzNow.t;
+  stats.hz.cnt++;
+
+  // Last-Packs für sofortiges Umschalten
+  last.vel = {
+    x: velX, y: velY, z: velZ, t: velT,
+    peak: stats.vel.peak,
+    rms:  Math.sqrt(stats.vel.sum2 / Math.max(1, stats.vel.cnt)),
+  };
+  last.acc = {
+    x: accX, y: accY, z: accZ, t: accT,
+    peak: stats.acc.peak,
+    rms:  Math.sqrt(stats.acc.sum2 / Math.max(1, stats.acc.cnt)),
+  };
+  last.hz = {
+    x: hzNow.x, y: hzNow.y, z: hzNow.z, t: hzNow.t,
+    peak: stats.hz.peak,
+    rms:  stats.hz.cnt ? (stats.hz.sum / stats.hz.cnt) : 0,
+  };
 
   renderFromLast();
   drawLive();
 
   if (dom.filterLabel)
     dom.filterLabel.textContent = FILTERS[activeFilter]?.label || activeFilter;
+
+  if (dom.debugPanel) {
+    dom.debugPanel.textContent =
+      `raw  ax=${rawX.toFixed(3)} ay=${rawY.toFixed(3)} az=${rawZ.toFixed(3)} m/s²\n` +
+      `filt fx=${accX.toFixed(3)} fy=${accY.toFixed(3)} fz=${accZ.toFixed(3)} m/s²  filter=${activeFilter}\n` +
+      `vel  x=${velX.toFixed(2)} y=${velY.toFixed(2)} z=${velZ.toFixed(2)} total=${velT.toFixed(2)} mm/s\n` +
+      `hz   x=${hzNow.x.toFixed(2)} y=${hzNow.y.toFixed(2)} z=${hzNow.z.toFixed(2)} t=${hzNow.t.toFixed(2)} Hz\n` +
+      `dt=${(dt*1000).toFixed(1)} ms`;
+  }
+
+  // Recording für Export
+  if (rec && rec.vel.t.length < 12000) {
+    rec.vel.x.push(velX); rec.vel.y.push(velY);
+    rec.vel.z.push(velZ); rec.vel.t.push(velT);
+
+    rec.acc.x.push(accX); rec.acc.y.push(accY);
+    rec.acc.z.push(accZ); rec.acc.t.push(accT);
+
+    rec.hz.x.push(hzNow.x); rec.hz.y.push(hzNow.y);
+    rec.hz.z.push(hzNow.z); rec.hz.t.push(hzNow.t);
+  }
 }
 
 // ===================== UNIT / FILTER EVENTS =====================
@@ -865,6 +875,7 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
   mn -= pad; mx += pad;
   const yOf = (v) => mT + ph - ((v - mn) / (mx - mn)) * ph;
 
+  // Grid
   ctx.strokeStyle = '#e6e6e6';
   ctx.lineWidth   = 1;
   for (let i = 0; i <= 10; i++) {
@@ -876,25 +887,30 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
     ctx.beginPath(); ctx.moveTo(mL, y); ctx.lineTo(mL + pw, y); ctx.stroke();
   }
 
+  // Achsen
   ctx.strokeStyle = '#111';
   ctx.lineWidth   = 1.2;
   ctx.beginPath();
   ctx.moveTo(mL, mT); ctx.lineTo(mL, mT + ph); ctx.lineTo(mL + pw, mT + ph);
   ctx.stroke();
 
+  // Titel
   ctx.fillStyle = '#111';
   ctx.font      = 'bold 14px Arial';
   ctx.fillText(title, mL, 18);
 
+  // Y-Einheit
   ctx.fillStyle = '#333';
   ctx.font      = '12px Arial';
   ctx.fillText(unit, 12, mT + 12);
 
+  // Y-Ticks
   for (let j = 0; j <= 6; j++) {
     const vv = mn + (j / 6) * (mx - mn);
     ctx.fillText(vv.toFixed(3), 10, yOf(vv) + 4);
   }
 
+  // X-Ticks (Zeit)
   ctx.textAlign = 'center';
   for (let i = 0; i <= 5; i++) {
     const t = durationSec * (i / 5);
@@ -904,6 +920,7 @@ function plotToDataURL({ series, title, unit, color, durationSec }) {
   ctx.textAlign = 'left';
   ctx.fillText('t [s]', mL + pw - 38, H - 4);
 
+  // Kurve
   ctx.strokeStyle = color;
   ctx.lineWidth   = 2;
   ctx.beginPath();
@@ -1009,7 +1026,7 @@ if (IS_IOS &&
     dom.installBanner.hidden   = false;
     dom.installBtn.textContent = 'Anleitung';
     dom.installBtn.onclick     = () =>
-      setStatus('iPhone: Safari → Teilen (□↑) → "Zum Home‑Bildschirm"', 'is-error');
+      setStatus('iPhone: Safari → Teilen (□↑) → „Zum Home‑Bildschirm"', 'is-error');
     return;
   }
 
@@ -1026,7 +1043,7 @@ if (IS_IOS &&
   dom.installBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     if (!deferredPrompt) {
-      setStatus('Chrome-Menü (⋮) → "App installieren"', 'is-error');
+      setStatus('Chrome-Menü (⋮) → „App installieren"', 'is-error');
       return;
     }
     deferredPrompt.prompt();
