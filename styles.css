@@ -1,28 +1,435 @@
-  <!-- ══════════ TAB: MESSEN ══════════ -->
-  <main id="tab-messen" class="pane is-active" role="tabpanel">
+/* =========================================
+   1. VARIABLEN & GRUNDLAGEN (HTB Design)
+   ========================================= */
+:root {
+  --bg: #0f0f10;
+  --card: #171718;
+  --card2: #202022;
+  --border: #2a2a2d;
+  --accent: #ffed00;
+  --text: #f2f2f2;
+  --muted: #8a8a92;
+  --ok: #00cc66;
+  --err: #ff4444;
+  --r: 16px;
+}
 
-    <!-- ▼ NEU: Akkordeon Stammdaten (im Rammpfahl-Design) ▼ -->
-    <details id="jobDetails" class="card card--collapsible" open>
-      <summary class="card__title">Stammdaten</summary>
-      <div class="card__body">
-        <div class="form-grid">
-          <label class="field field--full">
-            <span class="field__label">Baustelle / Projekt</span>
-            <input id="jobSite" class="field__input" type="text" placeholder="z. B. Hauptstraße 12, Wien" />
-          </label>
-          <label class="field">
-            <span class="field__label">Datum / Uhrzeit</span>
-            <input id="jobDate" class="field__input" type="datetime-local" />
-          </label>
-          <label class="field">
-            <span class="field__label">Verfasser</span>
-            <input id="jobAuthor" class="field__input" type="text" placeholder="Name" />
-          </label>
-        </div>
-      </div>
-    </details>
-    <!-- ▲ NEU ENDE ▲ -->
+* { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
+}
 
-    <!-- 1. STEUERUNG -->
-    <section class="card">
-       ...
+html, body { 
+  height: 100%; 
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+  padding: 0 14px 24px;
+  max-width: 960px;
+  margin: 0 auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* =========================================
+   2. HEADER & BRANDING
+   ========================================= */
+.brand { 
+  margin: 0 -14px 12px; 
+  overflow: hidden; 
+}
+
+.brand__bar { 
+  background: #000; 
+  display: flex; 
+  align-items: center; 
+  gap: 14px; 
+  padding: 10px 16px; 
+}
+
+.brand__logo svg,
+.brand__logo img { 
+  height: 46px; 
+  width: auto; 
+  display: block; 
+}
+
+.brand__company { 
+  color: #fff; 
+  font-weight: 900; 
+  font-size: 1.05em; 
+  white-space: nowrap; 
+}
+
+.brand__subtitle { 
+  color: rgba(255, 255, 255, .55); 
+  font-size: .75em; 
+  margin-top: 3px; 
+}
+
+/* =========================================
+   3. STATUS & TABS
+   ========================================= */
+.statusBar {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 10px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 0.9em;
+}
+.statusBar.is-running { border-color: var(--accent); color: var(--accent); }
+.statusBar.is-error   { border-color: var(--err); color: var(--err); }
+.statusBar.is-done    { border-color: var(--ok); color: var(--ok); }
+
+.tabs {
+  display: flex; 
+  gap: 4px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 6px;
+  border-radius: 10px;
+  font-weight: 900;
+  cursor: pointer;
+  font-size: .88em;
+  transition: background 0.2s, color 0.2s;
+}
+
+.tab.is-active { 
+  background: var(--accent); 
+  color: #111; 
+}
+
+.pane { display: none; }
+.pane.is-active { display: block; }
+
+/* =========================================
+   4. CARDS (KARTEN)
+   ========================================= */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.card__title {
+  font-size: .72em;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 950;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card__title::before {
+  content: "";
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* --- NEU: Collapsible Cards (Akkordeon) --- */
+.card--collapsible { padding-bottom: 10px; }
+.card--collapsible > summary {
+  list-style: none;
+  outline: none;
+}
+.card--collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+.card--collapsible > summary.card__title {
+  cursor: pointer;
+  margin-bottom: 0; 
+}
+.card--collapsible[open] > summary.card__title {
+  margin-bottom: 12px;
+}
+.card--collapsible > summary.card__title::after {
+  content: "▾";
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 900;
+  transition: transform .2s ease;
+  font-size: 1.4em;
+}
+.card--collapsible:not([open]) > summary.card__title::after {
+  transform: rotate(-90deg);
+}
+.card__body { margin-top: 4px; }
+
+/* =========================================
+   5. FORMULAR GRID & EINGABEN
+   ========================================= */
+.form-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 10px; 
+}
+@media(max-width: 520px) { 
+  .form-grid { grid-template-columns: 1fr; } 
+}
+
+.field { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 4px; 
+}
+.field--full { 
+  grid-column: 1 / -1; 
+}
+
+.field__label, .filter-label, .exportLabel {
+  font-size: .75em;
+  color: var(--muted);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.field__input, .field__select, .select {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: .9em;
+  outline: none;
+  font-family: inherit;
+  width: 100%;
+}
+.select--sm { padding: 8px; }
+
+/* =========================================
+   6. BUTTONS
+   ========================================= */
+.buttons { 
+  display: flex; 
+  gap: 10px; 
+  justify-content: center; 
+  flex-wrap: wrap; 
+  margin-bottom: 10px;
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 24px;
+  font-weight: 950;
+  cursor: pointer;
+  font-size: .95em;
+  font-family: inherit;
+  transition: opacity 0.2s, background 0.2s;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn--sm { padding: 8px 16px; font-size: 0.85em; }
+
+.btn--accent { background: var(--accent); color: #111; }
+.btn--ghost { background: var(--card2); border: 1px solid var(--border); color: var(--text); }
+.btn--stop { background: var(--err); color: #fff; }
+.btn--ok { background: var(--ok); color: #111; }
+.btn--warn { background: orange; color: #111; }
+
+/* =========================================
+   7. SCHWINGUNGSSENSOR SPEZIFISCH
+   ========================================= */
+/* Live Meta Row (über Diagramm) */
+.liveMeta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85em;
+  color: var(--muted);
+  margin: 0 4px 6px;
+  font-weight: bold;
+}
+.liveTimer { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Diagramme */
+canvas {
+  width: 100%;
+  background: #0b0b0c;
+  border-radius: 8px;
+  display: block;
+}
+
+/* Anzeige Kacheln (Tiles) */
+.mainValue {
+  text-align: center;
+  margin-bottom: 16px;
+}
+#mainNum {
+  font-size: 3em;
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+#mainSub {
+  font-size: 0.9em;
+  color: var(--muted);
+  font-weight: bold;
+  margin-top: 4px;
+}
+
+.unitSwitch {
+  display: flex;
+  background: var(--card2);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.unitBtn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 8px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: .2s;
+}
+.unitBtn.is-active {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+@media (max-width: 600px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+}
+.tile {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.tile__label {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+.tile__value {
+  font-size: 1.3em;
+  font-weight: 900;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.tile__unit {
+  font-size: 0.7em;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Tabellen (ÖNORM) */
+.din {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+  margin-top: 10px;
+}
+.din td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+.din tr:last-child td { border-bottom: none; }
+.din tr.is-active td {
+  color: var(--text);
+  font-weight: bold;
+  background: rgba(255, 237, 0, 0.1);
+}
+
+/* Filter Info Text */
+.filter-info { display: flex; flex-direction: column; gap: 12px; }
+.filter-info__item { background: var(--card2); padding: 10px; border-radius: 8px; border: 1px solid var(--border); }
+.filter-info__name { font-weight: bold; color: var(--text); margin-bottom: 4px; font-size: 0.9em; }
+.filter-info__desc { color: var(--muted); font-size: 0.85em; line-height: 1.4; margin-bottom: 6px; }
+.filter-info__range { font-size: 0.75em; color: var(--accent); font-weight: bold; }
+
+/* Gespeicherte Items */
+.saved-item {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  font-size: 0.9em;
+}
+
+/* Text Helpers */
+.hint { margin-top: 10px; color: var(--muted); font-size: .78em; text-align: center; line-height: 1.5; }
+.text { color: var(--muted); font-size: .84em; line-height: 1.6; }
+
+/* Debug / Utils */
+.debug {
+  font-size: 0.75em;
+  color: var(--muted);
+  background: #000;
+  padding: 10px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.debug summary { cursor: pointer; font-weight: bold; margin-bottom: 6px; outline: none; }
+
+/* Export Bereich */
+.exportRow {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+}
+.exportRow .select { flex: 1; }
+
+.results__head { margin: 24px 0 12px; }
+.results__title { font-weight: 900; font-size: 1.2em; color: var(--accent); }
+.results__meta { color: var(--muted); font-size: 0.85em; margin-top: 4px; }
+
+/* Install Banner */
+.installBanner {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--card); border-top: 1px solid var(--border);
+  padding: 14px; display: flex; align-items: center; justify-content: space-between;
+  z-index: 100;
+}
+.installBanner__text { font-weight: bold; font-size: 0.9em; }
+
+/* Footer */
+.footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: .78em;
+  margin-top: 16px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+.footer b { color: var(--text); }
