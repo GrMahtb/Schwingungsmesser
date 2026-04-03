@@ -67,28 +67,34 @@
   </nav>
 
   <!-- ══════════ TAB: MESSEN ══════════ -->
+  <!-- ══════════ TAB: MESSEN ══════════ -->
   <main id="tab-messen" class="pane is-active" role="tabpanel">
+
+    <!-- ▼ NEU: Akkordeon Stammdaten (im Rammpfahl-Design) ▼ -->
+    <details id="jobDetails" class="card card--collapsible" open>
+      <summary class="card__title">Stammdaten</summary>
+      <div class="card__body">
+        <div class="form-grid">
+          <label class="field field--full">
+            <span class="field__label">Baustelle / Projekt</span>
+            <input id="jobSite" class="field__input" type="text" placeholder="z. B. Hauptstraße 12, Wien" />
+          </label>
+          <label class="field">
+            <span class="field__label">Datum / Uhrzeit</span>
+            <input id="jobDate" class="field__input" type="datetime-local" />
+          </label>
+          <label class="field">
+            <span class="field__label">Verfasser</span>
+            <input id="jobAuthor" class="field__input" type="text" placeholder="Name" />
+          </label>
+        </div>
+      </div>
+    </details>
+    <!-- ▲ NEU ENDE ▲ -->
 
     <!-- 1. STEUERUNG -->
     <section class="card">
-      <div class="card__title">Steuerung</div>
-      <div class="buttons">
-        <button id="iosPermBtn" class="btn btn--warn" type="button" hidden>iOS Sensorerlaubnis</button>
-        <button id="startBtn"   class="btn btn--accent" type="button">Start</button>
-        <button id="resetBtn"   class="btn btn--ghost"  type="button">Reset</button>
-      </div>
-      <div class="filter-row">
-        <span class="filter-label">Filter:</span>
-        <select id="filterSelect" class="select select--sm">
-          <option value="raw">Roh (kein Filter)</option>
-          <option value="hp1" selected>Tiefpass-Bereinigung (HP 1 Hz)</option>
-          <option value="bau">Baustelle allg. (1–25 Hz)</option>
-          <option value="pfahl">Pfahlrammung (1–8 Hz)</option>
-          <option value="verd">Verdichter (8–25 Hz)</option>
-          <option value="verk">Verkehr (1–15 Hz)</option>
-        </select>
-      </div>
-    </section>
+       ...
 
     <!-- 2. LIVE-VERLAUF -->
     <div class="liveMeta">
