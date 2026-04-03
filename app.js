@@ -912,3 +912,142 @@ function exportPDF() {
     [`Einheit:`,       unit],
     [`Punkte:`,        String(savedData.n)],
     [`Filter:`,        FILTERS[savedData.filter]?.label || savedData.
+    savedData.filter],
+    [`Hinweis:`,       'Smartphone-Sensoren sind nicht kalibriert – nur Orientierung.'],
+  ];
+
+  lines.forEach(([k, v]) => {
+    doc.text(`${k} ${v}`, margin, y);
+    y += 5;
+  });
+
+  y += 2;
+  doc.setDrawColor(220);
+  doc.line(margin, y, margin + contentW, y);
+  y += 6;
+
+  // Bilder (Plots) einfügen (jeweils skalieren auf Breite)
+  const imgW = contentW;
+  const imgH = 45; // fixe Höhe, passt gut auf A4
+
+  const addPlot = (title, imgData) => {
+    doc.setTextColor(20);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, margin, y);
+    y += 3;
+
+    doc.addImage(imgData, 'PNG', margin, y, imgW, imgH);
+    y += imgH + 8;
+
+    // Seitenumbruch wenn nötig
+    if (y > 270) {
+      doc.addPage();
+      y = 14;
+    }
+  };
+
+  addPlot('X-Achse', imgX);
+  addPlot('Y-Achse', imgY);
+  addPlot('Z-Achse', imgZ);
+
+  // Footer
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(130);
+  doc.text(`Erstellt: ${new Date().toLocaleString('de-DE')}`, margin, 290);
+
+  // Dateiname: JJJJMMTT_...
+  const prefix = getDatePrefix();
+  const sitePart = job.site ? `_${job.site.replace(/[^a-zA-Z0-9äöüÄÖÜ]/g, '_').slice(0,20)}` : '';
+  const filename = `${prefix}_HTB_Messung${sitePart}.pdf`;
+
+  // Direkter Download (kein Druckdialog, keine neue Seite)
+  doc.save(filename);
+
+  // In der App bleiben: wir machen nichts weiter (kein window.open, kein print)
+  setStatus('PDF heruntergeladen ✓', 'is-done');
+}
+dom.pdfBtn?.addEventListener('click', exportPDF);
+
+// ===================== iOS PERMISSION =====================
+if (IS_IOS &&
+    typeof DeviceMotionEvent !== 'undefined' &&
+    typeof DeviceMotionEvent.requestPermission === 'function') {
+  if (dom.iosPermBtn) dom.iosPermBtn.hidden = false;
+  dom.iosPermBtn?.addEventListener('click', async () => {
+    try {
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res === 'granted') {
+        dom.iosPermBtn.hidden = true;
+        setStatus('Sensorerlaubnis erteilt – jetzt Start drücken.', 'is-done');
+      } else {
+        setStatus('Sensorerlaubnis verweigert!', 'is-error');
+      }
+    } catch (err) {
+      setStatus('Fehler: ' + err.message, 'is-error');
+    }
+  });
+}
+
+// ===================== PWA INSTALL =====================
+(() => {
+  let deferredPrompt = null;
+  if (!dom.installBanner || !dom.installBtn) return;
+  if (IS_STANDALONE) { dom.installBanner.hidden = true; return; }
+
+  if (IS_IOS) {
+    dom.installBanner.hidden   = false;
+    dom.installBtn.textContent = 'Anleitung';
+    dom.installBtn.onclick     = () =>
+      setStatus('iPhone: Safari → Teilen (□↑) → "Zum Home‑Bildschirm"', 'is-error');
+    return;
+  }
+
+  dom.installBanner.hidden = true;
+  dom.installBtn.disabled  = true;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    dom.installBanner.hidden = false;
+    dom.installBtn.disabled  = false;
+  });
+
+  dom.installBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!deferredPrompt) {
+      setStatus('Chrome-Menü (⋮) → "App installieren"', 'is-error');
+      return;
+    }
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt           = null;
+    dom.installBanner.hidden = true;
+    dom.installBtn.disabled  = true;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt           = null;
+    dom.installBanner.hidden = true;
+    dom.installBtn.disabled  = true;
+  });
+})();
+
+// ===================== SERVICE WORKER =====================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+// ===================== INIT =====================
+initTabs();
+if (dom.filterLabel) dom.filterLabel.textContent = FILTERS[activeFilter]?.label || activeFilter;
+buildOenormTable();
+setUnitUI();
+resetAll();
+setTimeout(initCanvases, 150);
+
+// Beim Start: gespeicherte Sessions in App-Tab anzeigen (falls man gleich dort ist)
+renderSavedList();
